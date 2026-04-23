@@ -1,86 +1,135 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-import cv2
-import numpy as np
+import gspread
+from google.oauth2.service_account import Credentials
+import pandas as pd
+import json
+import base64
+import zxingcpp
+from PIL import Image
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE LA NUBE ---
-# Aquí pegaremos la URL de tu Google Sheet más adelante en los "Secrets" de Streamlit
 SHEET_URL = st.secrets["public_gsheets_url"]
+SCOPES = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-st.set_page_config(page_title="Inventario Cloud", page_icon="☁️")
-st.title("☁️ Inventario en la Nube")
+st.set_page_config(page_title="Inventario de Bebidas", page_icon="🥤", layout="wide")
 
-# Conexión con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+def get_client():
+    creds_dict = json.loads(base64.b64decode(st.secrets["gcp_b64"]).decode())
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    return gspread.authorize(creds)
 
+@st.cache_data(ttl=30)
 def leer_datos():
-    return conn.read(spreadsheet=SHEET_URL, usecols=[0, 1, 2, 3], ttl=0)
+    gc = get_client()
+    sh = gc.open_by_url(SHEET_URL)
+    ws = sh.get_worksheet(0)
+    registros = ws.get_all_records()
+    if registros:
+        return pd.DataFrame(registros)
+    return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Ultima_Actualizacion"])
+
+def guardar_datos(df):
+    gc = get_client()
+    sh = gc.open_by_url(SHEET_URL)
+    ws = sh.get_worksheet(0)
+    ws.clear()
+    ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
 def procesar_codigo(img_buffer):
-    file_bytes = np.asarray(bytearray(img_buffer.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
-    detector = cv2.barcode.BarcodeDetector()
-    resultado = detector.detectAndDecode(img)
-    # Manejo de versiones de OpenCV
-    if len(resultado) == 4:
-        ok, decoded_info, _, _ = resultado
-    else:
-        decoded_info, _, _ = resultado
-        ok = True if decoded_info and decoded_info[0] else False
-    
-    if ok and decoded_info and decoded_info[0]:
-        return decoded_info[0]
+    img = Image.open(img_buffer)
+    resultados = zxingcpp.read_barcodes(img)
+    if resultados:
+        return resultados[0].text
     return None
 
-# --- LÓGICA DE LA APP ---
-menu = ["Venta (Salida)", "Ingreso (Entrada)", "Ver Stock"]
-opcion = st.sidebar.selectbox("Acción", menu)
+st.title("🥤 Inventario de Bebidas")
+menu = ["📦 Ver Stock", "➕ Ingreso (Entrada)", "🛒 Venta (Salida)"]
+opcion = st.sidebar.selectbox("¿Qué deseas hacer?", menu)
+st.sidebar.markdown("---")
+st.sidebar.caption("Sistema de inventario en la nube")
 
-df = leer_datos()
-
-if opcion == "Ver Stock":
-    st.dataframe(df, use_container_width=True)
+if opcion == "📦 Ver Stock":
+    st.subheader("📦 Stock Actual")
+    if st.button("🔄 Actualizar"):
+        st.cache_data.clear()
+    df = leer_datos()
+    if df.empty:
+        st.info("No hay productos registrados todavía.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total productos", len(df))
+        try:
+            col2.metric("Unidades totales", int(df["Stock"].astype(int).sum()))
+            bajo_stock = df[df["Stock"].astype(int) <= 5]
+            col3.metric("⚠️ Bajo stock (≤5)", len(bajo_stock))
+        except:
+            pass
+        st.dataframe(df, use_container_width=True)
+        try:
+            if not bajo_stock.empty:
+                st.warning("⚠️ Productos con stock bajo:")
+                st.dataframe(bajo_stock[["Producto", "Stock"]], use_container_width=True)
+        except:
+            pass
 
 else:
-    st.subheader(f"Registro de {opcion}")
-    metodo = st.radio("Método:", ["Cámara", "Manual"])
-    
+    es_venta = "Venta" in opcion
+    icono = "🛒" if es_venta else "➕"
+    st.subheader(f"{icono} {'Registrar Venta' if es_venta else 'Registrar Ingreso'}")
+    df = leer_datos()
+    metodo = st.radio("Método:", ["📷 Cámara", "⌨️ Manual"], horizontal=True)
+
     codigo_final = None
-    if metodo == "Cámara":
-        foto = st.camera_input("Escanea")
+    if metodo == "📷 Cámara":
+        foto = st.camera_input("Apunta la cámara al código de barras")
         if foto:
             codigo_final = procesar_codigo(foto)
+            if not codigo_final:
+                st.warning("⚠️ No se detectó código. Usa el método manual.")
     else:
-        codigo_final = st.text_input("Escribe el código:")
+        codigo_final = st.text_input("Código del producto:")
 
     if codigo_final:
-        codigo_str = str(codigo_final)
-        st.success(f"Código: {codigo_str}")
-        
-        # Buscar en el DataFrame de Google Sheets
-        df['Codigo'] = df['Codigo'].astype(str)
-        existe = codigo_str in df['Codigo'].values
-        
-        nombre_act = df.loc[df['Codigo'] == codigo_str, 'Producto'].values[0] if existe else ""
-        nombre = st.text_input("Nombre:", value=nombre_act)
+        codigo_str = str(codigo_final).strip()
+        st.success(f"✅ Código: **{codigo_str}**")
+        df["Codigo"] = df["Codigo"].astype(str)
+        existe = codigo_str in df["Codigo"].values
+
+        if existe:
+            nombre_actual = df.loc[df["Codigo"] == codigo_str, "Producto"].values[0]
+            stock_actual  = int(df.loc[df["Codigo"] == codigo_str, "Stock"].values[0])
+            st.info(f"Producto: **{nombre_actual}** | Stock actual: **{stock_actual}**")
+        else:
+            nombre_actual = ""
+            stock_actual  = 0
+            st.info("Producto nuevo — se registrará al confirmar.")
+
+        nombre   = st.text_input("Nombre del producto:", value=str(nombre_actual))
         cantidad = st.number_input("Cantidad:", min_value=1, value=1)
 
-        if st.button("Confirmar"):
-            ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            if existe:
-                ajuste = -cantidad if "Venta" in opcion else cantidad
-                nuevo_stock = int(df.loc[df['Codigo'] == codigo_str, 'Stock'].values[0]) + ajuste
-                df.loc[df['Codigo'] == codigo_str, 'Stock'] = nuevo_stock
-                df.loc[df['Codigo'] == codigo_str, 'Ultima_Actualizacion'] = ahora
-                if nombre: df.loc[df['Codigo'] == codigo_str, 'Producto'] = nombre
-            else:
-                stock_ini = -cantidad if "Venta" in opcion else cantidad
-                nuevo_item = pd.DataFrame([{"Codigo": codigo_str, "Producto": nombre, "Stock": stock_ini, "Ultima_Actualizacion": ahora}])
-                df = pd.concat([df, nuevo_item], ignore_index=True)
-
-            # GUARDAR EN GOOGLE SHEETS
-            conn.update(spreadsheet=SHEET_URL, data=df)
-            st.balloons()
-            st.success("¡Google Sheets actualizado!")
+        if es_venta and existe and cantidad > stock_actual:
+            st.error(f"❌ Stock insuficiente. Disponible: {stock_actual}")
+        else:
+            if st.button(f"{'🛒 Confirmar Venta' if es_venta else '➕ Confirmar Ingreso'}", type="primary"):
+                ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                if existe:
+                    ajuste      = -cantidad if es_venta else cantidad
+                    nuevo_stock = stock_actual + ajuste
+                    df.loc[df["Codigo"] == codigo_str, "Stock"]                = nuevo_stock
+                    df.loc[df["Codigo"] == codigo_str, "Ultima_Actualizacion"] = ahora
+                    if nombre:
+                        df.loc[df["Codigo"] == codigo_str, "Producto"] = nombre
+                else:
+                    stock_ini  = -cantidad if es_venta else cantidad
+                    nuevo_item = pd.DataFrame([{
+                        "Codigo": codigo_str, "Producto": nombre,
+                        "Stock": stock_ini,   "Ultima_Actualizacion": ahora
+                    }])
+                    df = pd.concat([df, nuevo_item], ignore_index=True)
+                guardar_datos(df)
+                st.cache_data.clear()
+                st.balloons()
+                st.success("✅ ¡Actualizado!")
