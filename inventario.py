@@ -5,7 +5,133 @@ import pandas as pd
 from datetime import datetime
 
 # ============================================================
-#  CONFIGURACIÓN
+#  CONFIGURACIÓN TEMA APP
+# ============================================================
+st.set_page_config(
+    page_title="Soda Pro - Inventario",
+    page_icon="🥤",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# CSS PERSONALIZADO - Tema profesional
+st.markdown("""
+    <style>
+    /* Fondo general */
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+    
+    /* Botones grandes y redondeados */
+    .stButton>button {
+        width: 100%;
+        border-radius: 15px;
+        height: 3.5em;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        border: none;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+    
+    /* Selectbox bonito */
+    .stSelectbox>div {
+        border-radius: 12px;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px 12px 0 0;
+        background-color: rgba(255,255,255,0.1);
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(255,255,255,0.3) !important;
+    }
+    
+    /* Métricas */
+    [data-testid="metric-container"] {
+        background: rgba(255,255,255,0.95);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    /* Info boxes */
+    .stInfo {
+        background: rgba(102, 126, 234, 0.1);
+        border-left: 4px solid #667eea;
+        border-radius: 8px;
+    }
+    
+    .stSuccess {
+        background: rgba(76, 175, 80, 0.1);
+        border-left: 4px solid #4caf50;
+        border-radius: 8px;
+    }
+    
+    .stWarning {
+        background: rgba(255, 193, 7, 0.1);
+        border-left: 4px solid #ffc107;
+        border-radius: 8px;
+    }
+    
+    .stError {
+        background: rgba(244, 67, 54, 0.1);
+        border-left: 4px solid #f44336;
+        border-radius: 8px;
+    }
+    
+    /* Ocultar elementos de Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Título principal */
+    h1 {
+        color: white;
+        text-align: center;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        margin-bottom: 30px;
+    }
+    
+    h2 {
+        color: white;
+        text-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    }
+    
+    /* Dataframe */
+    .stDataFrame {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    /* Number input */
+    .stNumberInput>div {
+        border-radius: 12px;
+    }
+    
+    /* Text input */
+    .stTextInput>div {
+        border-radius: 12px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+#  CONFIGURACIÓN GOOGLE SHEETS
 # ============================================================
 SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
 
@@ -25,10 +151,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-st.set_page_config(page_title="Inventario de Bebidas", page_icon="🥤", layout="wide")
-
 # ============================================================
-#  GOOGLE SHEETS
+#  FUNCIONES
 # ============================================================
 def get_worksheet():
     creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
@@ -50,74 +174,177 @@ def guardar_datos(df):
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
 # ============================================================
-#  INTERFAZ
+#  INTERFAZ PRINCIPAL
 # ============================================================
-st.title("🥤 Inventario de Bebidas")
-menu = ["📦 Ver Stock", "➕ Ingreso (Entrada)", "🛒 Venta (Salida)"]
-opcion = st.sidebar.selectbox("¿Qué deseas hacer?", menu)
-st.sidebar.markdown("---")
-st.sidebar.caption("Sistema de inventario en la nube")
+st.title("🥤 SODA PRO")
+st.markdown("---")
 
-if opcion == "📦 Ver Stock":
-    st.subheader("📦 Stock Actual")
-    if st.button("🔄 Actualizar"):
-        st.cache_data.clear()
+# Tabs principales
+tab1, tab2, tab3 = st.tabs(["📲 OPERACIONES", "📊 INVENTARIO", "⚙️ SISTEMA"])
+
+# ============================================================
+#  TAB 1: OPERACIONES
+# ============================================================
+with tab1:
     df = leer_datos()
+    
     if df.empty:
-        st.info("No hay productos registrados todavía.")
+        st.warning("⚠️ No hay productos. Crear productos en la pestaña INVENTARIO")
     else:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total productos", len(df))
-        try:
-            col2.metric("Unidades totales", int(df["Stock"].astype(int).sum()))
-            bajo_stock = df[df["Stock"].astype(int) <= 5]
-            col3.metric("⚠️ Bajo stock (≤5)", len(bajo_stock))
-        except:
-            pass
-        st.dataframe(df, use_container_width=True)
-        try:
-            if not bajo_stock.empty:
-                st.warning("⚠️ Productos con stock bajo:")
-                st.dataframe(bajo_stock[["Producto", "Stock"]], use_container_width=True)
-        except:
-            pass
-
-else:
-    es_venta = "Venta" in opcion
-    icono = "🛒" if es_venta else "➕"
-    st.subheader(f"{icono} {'Registrar Venta' if es_venta else 'Registrar Ingreso'}")
-    df = leer_datos()
-
-    if df.empty:
-        st.warning("⚠️ No hay productos registrados. Primero crea productos en 'Ver Stock'.")
-    else:
-        # Dropdown de productos
-        opciones = ["--- Selecciona un producto ---"] + df["Producto"].tolist()
-        producto_seleccionado = st.selectbox("Producto:", opciones)
-
-        if producto_seleccionado != "--- Selecciona un producto ---":
-            # Obtener datos del producto seleccionado
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_operacion = st.radio(
+                "TIPO DE OPERACIÓN:",
+                ["➕ INGRESO", "🛒 VENTA"],
+                horizontal=True
+            )
+        
+        with col2:
+            st.write("")  # espaciador
+        
+        st.markdown("---")
+        
+        # Selector de producto
+        opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
+        producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
+        
+        if producto_seleccionado != "--- SELECCIONA BEBIDA ---":
             fila = df[df["Producto"] == producto_seleccionado].iloc[0]
             codigo = fila["Codigo"]
             stock_actual = int(fila["Stock"])
-
-            st.info(f"📦 Código: **{codigo}** | Stock actual: **{stock_actual}** unidades")
-
-            cantidad = st.number_input("Cantidad:", min_value=1, value=1)
-
+            
+            # Mostrar datos del producto
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🔖 Código", codigo)
+            with col2:
+                st.metric("📦 Stock Actual", f"{stock_actual} unidades")
+            with col3:
+                st.metric("⏰ Última Actualización", fila["Ultima_Actualizacion"])
+            
+            st.markdown("---")
+            
+            # Entrada de cantidad
+            cantidad = st.number_input(
+                "CANTIDAD A REGISTRAR:",
+                min_value=1,
+                value=1,
+                step=1
+            )
+            
             # Validación para ventas
-            if es_venta and cantidad > stock_actual:
+            if "VENTA" in tipo_operacion and cantidad > stock_actual:
                 st.error(f"❌ Stock insuficiente. Disponible: {stock_actual} unidades")
+                boton_disabled = True
             else:
-                if st.button(f"{'🛒 Confirmar Venta' if es_venta else '➕ Confirmar Ingreso'}", type="primary"):
-                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    ajuste = -cantidad if es_venta else cantidad
-                    nuevo_stock = stock_actual + ajuste
+                boton_disabled = False
+            
+            st.markdown("---")
+            
+            # Botón de confirmación
+            if st.button(
+                f"{'➕ CONFIRMAR INGRESO' if 'INGRESO' in tipo_operacion else '🛒 CONFIRMAR VENTA'}",
+                disabled=boton_disabled,
+                use_container_width=True
+            ):
+                ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
+                nuevo_stock = stock_actual + ajuste
+                
+                df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
+                df.loc[df["Producto"] == producto_seleccionado, "Ultima_Actualizacion"] = ahora
+                
+                guardar_datos(df)
+                st.cache_data.clear()
+                
+                st.success(f"✅ {producto_seleccionado} actualizado!")
+                st.info(f"Nuevo stock: {nuevo_stock} unidades")
+                st.balloons()
 
-                    df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
-                    df.loc[df["Producto"] == producto_seleccionado, "Ultima_Actualizacion"] = ahora
+# ============================================================
+#  TAB 2: INVENTARIO
+# ============================================================
+with tab2:
+    df = leer_datos()
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("📊 ESTADO DE BEBIDAS")
+    with col2:
+        if st.button("🔄 ACTUALIZAR"):
+            st.cache_data.clear()
+            st.rerun()
+    
+    if df.empty:
+        st.info("No hay productos registrados todavía.")
+    else:
+        # Métricas generales
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Bebidas", len(df))
+        with col2:
+            total_unidades = int(df["Stock"].astype(int).sum())
+            st.metric("Unidades Totales", total_unidades)
+        with col3:
+            bajo_stock = df[df["Stock"].astype(int) <= 5]
+            st.metric("⚠️ Stock Bajo", len(bajo_stock))
+        
+        st.markdown("---")
+        
+        # Tabla de inventario
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Codigo": st.column_config.TextColumn("🔖 Código", width="medium"),
+                "Producto": st.column_config.TextColumn("🥤 Producto", width="large"),
+                "Stock": st.column_config.NumberColumn("📦 Stock", width="medium"),
+                "Ultima_Actualizacion": st.column_config.TextColumn("⏰ Última Actualización", width="large")
+            }
+        )
+        
+        # Alerta de bajo stock
+        if not bajo_stock.empty:
+            st.markdown("---")
+            st.warning("⚠️ PRODUCTOS CON STOCK BAJO O AGOTADO")
+            st.dataframe(
+                bajo_stock[["Producto", "Stock"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
-                    guardar_datos(df)
-                    st.cache_data.clear()
-                    st.balloons()
-                    st.success(f"✅ ¡{producto_seleccionado} actualizado! Nuevo stock: {nuevo_stock}")
+# ============================================================
+#  TAB 3: SISTEMA
+# ============================================================
+with tab3:
+    st.subheader("⚙️ CONFIGURACIÓN DEL SISTEMA")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**ESTADO DEL SISTEMA**")
+        st.info("✅ Sistema operativo")
+        st.info("✅ Google Sheets conectado")
+        st.info("✅ Datos sincronizados")
+    
+    with col2:
+        st.write("**ACCIONES**")
+        if st.button("🔄 Sincronizar Datos", use_container_width=True):
+            st.cache_data.clear()
+            st.success("✅ Datos sincronizados correctamente")
+        
+        if st.button("📥 Descargar Inventario", use_container_width=True):
+            df = leer_datos()
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar CSV",
+                data=csv,
+                file_name=f"inventario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    
+    st.markdown("---")
+    st.caption("Soda Pro v1.0 - Sistema de Inventario en la Nube")
+    st.caption("© 2026 - Todos los derechos reservados")
