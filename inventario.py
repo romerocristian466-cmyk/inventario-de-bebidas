@@ -7,7 +7,7 @@ from datetime import datetime
 # ============================================================
 #  CONFIGURACIÓN
 # ============================================================
-SHEET_ID = "1T5BQeBa_s08AYdMjo_UtW3ZxvCX0HBwULHBvxqscz74"
+SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
 
 CREDENTIALS = {
     "type": "service_account",
