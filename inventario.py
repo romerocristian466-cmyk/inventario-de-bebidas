@@ -2,13 +2,24 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import json
-import base64
-import zxingcpp
-from PIL import Image
 from datetime import datetime
 
-SHEET_URL = st.secrets["public_gsheets_url"]
+# ============================================================
+#  CREDENCIALES Y CONFIGURACIÓN
+# ============================================================
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1T5BQeBa_s08AYdMjo_UtW3ZxvCX0HBwULHBvxqscz74/edit"
+
+CREDENTIALS = {
+    "type": "service_account",
+    "project_id": "speedy-filament-414621",
+    "private_key_id": "755ba08c379b33c9d43dd960fd30c59a09684cce",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCzojW5F7S2r6/p\noGRl8BO2tuo27jgYcSRwaAyQgvHnsieqmflCIPQUoUK/CqydPBZU+8WkzJ+NXaVg\nDZ1PQ8rYhodZ0x/0y2zgHAH68i9JEeYpXFNLn5kPYvnmbGz4LZzgnOOcKhvdAPiv\ndfYrT1eMC5qMbntXp7Ir8ZZCgWWRl/Ob2C/x5AFQ6JIckQ4EDH3NCQY7D3Oe1F64\nAlGVx8obgXbURrCo9bZ8BDCkvbA0qk84L3JgEXDyf+01n/ej9dwOeD5IdhqxdHpI\nmbEZJbjX5QtlxwQ9k8QsKdSsAldV4HPkmghdvzshXQhr+6rO6hU9Uzm3UrGeRrMR\nROZqM6zlAgMBAAECggEAJzlC9lLbEq37oS205n5c6592tn5fUNT5wjKyFacGF9PS\nrgGXiA1Ghq+ssabsyJuLe8yLHGBS8Y0SdI4cfKeephd//Ajp+CuoLypmc0uJMDEg\nmwTuKjvj8dRooVwpEirxj6kqWRnnwiL5amS9VzkosmuBOGtScvIq6UYEC6sSCM9x\nysEbIrzWG2moNFLAmNSGsU7T3wMigO5oHCtaSIF3TmBFp1Gez8i+cHJk0Xx5Z70X\nBgWRfyCGBsCXJcI/wB58U24LXQxM55B7b3roxqHl9/cOLL4jAdDgFpGfWLxbbHQ9\n4NkuF62+ljaQGnlzHSuZvLd3H0YuEPjaUmvOHYwIAQKBgQDX6LHx3bQVVZo1/3ES\n8u5l3BxBwu2WJQHoR3A2MHuqD390DB6WQubvsdJyiqGfEqs66bS6U7xPlU/GNl+4\nL9RvFib8N0Qz7iUGEZrHldJIDvPmluWivX/DPl67V3QQrH7BYfNpwennSDyWjN5i\nM0OL+tDAfaBykTcFFshF3xYE5QKBgQDU/SeYWLHWJLJ4d/eqCTHjOXFy8jxE+RxC\neFOO2eQGwRl+lmI/98Tz0pnMvND5YqzXlFS0Ms/f9dpjcpgLNdqRNfB4yxRXGd6h\netbRVbtksbikeV00uWt6u8VrrVq/YcEmBjZGplHAaz5geTrDeVANWBScBAcLWATN\nWM0g0jSIAQKBgQCNoCDhY6lV+UHfu8CDSoEgpcKPTHsmav4WTI4JrcHgqqvTBoQl\n0prDjiRaaB9eRhO14Elhk73JgkrC3TXqjs1NVP2bofEGE2eL1I5v7xHxnIVWs5LM\nLnuZKddgEhybN1sqJMNTkxSIVrUPmDXjunbLYmn+aimOHT03BFu4oX5DFQKBgEp9\ns8BznNcBhK3ff24nwxvudkA2el/BJGIXBVpb2IWIOattWzV2KZsBGCtkCk5+dWb8\niNdxQgTZTqUjagvZrPTGgbEtjZKdCKE/fiw+qMih46saiz+qbe3CCF0Nh0SSIuRy\nnb794m/C0lEZdTTyk83m9WZPfks4YI2VNkD5Y8gBAoGAeWGd1N2bqgxKKKWxwWyD\nuTEzoLOciRDlo9zpX0D5UpA5AM3YGXhLVdmMtf8/md6Yr2rr2iDuoORb11uq6Abo\nRoQdW6nVtoqLn76AaTURC0ntHJXe1gsOGW5JXptXGHBe+ChbWL5Ke8ftay8M4Cjs\nAMzvC8b0ReF1FK1IJu9ohsA=\n-----END PRIVATE KEY-----\n",
+    "client_email": "inventario-de-bebidas@speedy-filament-414621.iam.gserviceaccount.com",
+    "client_id": "116633712768836452590",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token"
+}
+
 SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
@@ -16,9 +27,11 @@ SCOPES = [
 
 st.set_page_config(page_title="Inventario de Bebidas", page_icon="🥤", layout="wide")
 
+# ============================================================
+#  GOOGLE SHEETS
+# ============================================================
 def get_client():
-    creds_dict = json.loads(base64.b64decode(st.secrets["gcp_b64"]).decode())
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
     return gspread.authorize(creds)
 
 @st.cache_data(ttl=30)
@@ -38,13 +51,9 @@ def guardar_datos(df):
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
-def procesar_codigo(img_buffer):
-    img = Image.open(img_buffer)
-    resultados = zxingcpp.read_barcodes(img)
-    if resultados:
-        return resultados[0].text
-    return None
-
+# ============================================================
+#  INTERFAZ
+# ============================================================
 st.title("🥤 Inventario de Bebidas")
 menu = ["📦 Ver Stock", "➕ Ingreso (Entrada)", "🛒 Venta (Salida)"]
 opcion = st.sidebar.selectbox("¿Qué deseas hacer?", menu)
@@ -80,17 +89,8 @@ else:
     icono = "🛒" if es_venta else "➕"
     st.subheader(f"{icono} {'Registrar Venta' if es_venta else 'Registrar Ingreso'}")
     df = leer_datos()
-    metodo = st.radio("Método:", ["📷 Cámara", "⌨️ Manual"], horizontal=True)
 
-    codigo_final = None
-    if metodo == "📷 Cámara":
-        foto = st.camera_input("Apunta la cámara al código de barras")
-        if foto:
-            codigo_final = procesar_codigo(foto)
-            if not codigo_final:
-                st.warning("⚠️ No se detectó código. Usa el método manual.")
-    else:
-        codigo_final = st.text_input("Código del producto:")
+    codigo_final = st.text_input("Código del producto:")
 
     if codigo_final:
         codigo_str = str(codigo_final).strip()
