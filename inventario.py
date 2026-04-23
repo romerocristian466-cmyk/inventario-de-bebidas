@@ -88,46 +88,36 @@ else:
     st.subheader(f"{icono} {'Registrar Venta' if es_venta else 'Registrar Ingreso'}")
     df = leer_datos()
 
-    codigo_final = st.text_input("Código del producto:")
+    if df.empty:
+        st.warning("⚠️ No hay productos registrados. Primero crea productos en 'Ver Stock'.")
+    else:
+        # Dropdown de productos
+        opciones = ["--- Selecciona un producto ---"] + df["Producto"].tolist()
+        producto_seleccionado = st.selectbox("Producto:", opciones)
 
-    if codigo_final:
-        codigo_str = str(codigo_final).strip()
-        st.success(f"✅ Código: **{codigo_str}**")
-        df["Codigo"] = df["Codigo"].astype(str)
-        existe = codigo_str in df["Codigo"].values
+        if producto_seleccionado != "--- Selecciona un producto ---":
+            # Obtener datos del producto seleccionado
+            fila = df[df["Producto"] == producto_seleccionado].iloc[0]
+            codigo = fila["Codigo"]
+            stock_actual = int(fila["Stock"])
 
-        if existe:
-            nombre_actual = df.loc[df["Codigo"] == codigo_str, "Producto"].values[0]
-            stock_actual  = int(df.loc[df["Codigo"] == codigo_str, "Stock"].values[0])
-            st.info(f"Producto: **{nombre_actual}** | Stock actual: **{stock_actual}**")
-        else:
-            nombre_actual = ""
-            stock_actual  = 0
-            st.info("Producto nuevo — se registrará al confirmar.")
+            st.info(f"📦 Código: **{codigo}** | Stock actual: **{stock_actual}** unidades")
 
-        nombre   = st.text_input("Nombre del producto:", value=str(nombre_actual))
-        cantidad = st.number_input("Cantidad:", min_value=1, value=1)
+            cantidad = st.number_input("Cantidad:", min_value=1, value=1)
 
-        if es_venta and existe and cantidad > stock_actual:
-            st.error(f"❌ Stock insuficiente. Disponible: {stock_actual}")
-        else:
-            if st.button(f"{'🛒 Confirmar Venta' if es_venta else '➕ Confirmar Ingreso'}", type="primary"):
-                ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
-                if existe:
-                    ajuste      = -cantidad if es_venta else cantidad
+            # Validación para ventas
+            if es_venta and cantidad > stock_actual:
+                st.error(f"❌ Stock insuficiente. Disponible: {stock_actual} unidades")
+            else:
+                if st.button(f"{'🛒 Confirmar Venta' if es_venta else '➕ Confirmar Ingreso'}", type="primary"):
+                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    ajuste = -cantidad if es_venta else cantidad
                     nuevo_stock = stock_actual + ajuste
-                    df.loc[df["Codigo"] == codigo_str, "Stock"]                = nuevo_stock
-                    df.loc[df["Codigo"] == codigo_str, "Ultima_Actualizacion"] = ahora
-                    if nombre:
-                        df.loc[df["Codigo"] == codigo_str, "Producto"] = nombre
-                else:
-                    stock_ini  = -cantidad if es_venta else cantidad
-                    nuevo_item = pd.DataFrame([{
-                        "Codigo": codigo_str, "Producto": nombre,
-                        "Stock": stock_ini,   "Ultima_Actualizacion": ahora
-                    }])
-                    df = pd.concat([df, nuevo_item], ignore_index=True)
-                guardar_datos(df)
-                st.cache_data.clear()
-                st.balloons()
-                st.success("✅ ¡Actualizado!")
+
+                    df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
+                    df.loc[df["Producto"] == producto_seleccionado, "Ultima_Actualizacion"] = ahora
+
+                    guardar_datos(df)
+                    st.cache_data.clear()
+                    st.balloons()
+                    st.success(f"✅ ¡{producto_seleccionado} actualizado! Nuevo stock: {nuevo_stock}")
