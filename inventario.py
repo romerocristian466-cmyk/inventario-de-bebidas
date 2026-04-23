@@ -5,9 +5,9 @@ import pandas as pd
 from datetime import datetime
 
 # ============================================================
-#  CREDENCIALES Y CONFIGURACIÓN
+#  CONFIGURACIÓN
 # ============================================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1T5BQeBa_s08AYdMjo_UtW3ZxvCX0HBwULHBvxqscz74/edit"
+SHEET_ID = "1T5BQeBa_s08AYdMjo_UtW3ZxvCX0HBwULHBvxqscz74"
 
 CREDENTIALS = {
     "type": "service_account",
@@ -30,24 +30,22 @@ st.set_page_config(page_title="Inventario de Bebidas", page_icon="🥤", layout=
 # ============================================================
 #  GOOGLE SHEETS
 # ============================================================
-def get_client():
+def get_worksheet():
     creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
-    return gspread.authorize(creds)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(SHEET_ID)
+    return sh.get_worksheet(0)
 
 @st.cache_data(ttl=30)
 def leer_datos():
-    gc = get_client()
-    sh = gc.open_by_url(SHEET_URL)
-    ws = sh.get_worksheet(0)
+    ws = get_worksheet()
     registros = ws.get_all_records()
     if registros:
         return pd.DataFrame(registros)
     return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Ultima_Actualizacion"])
 
 def guardar_datos(df):
-    gc = get_client()
-    sh = gc.open_by_url(SHEET_URL)
-    ws = sh.get_worksheet(0)
+    ws = get_worksheet()
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
