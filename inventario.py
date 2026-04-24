@@ -166,7 +166,7 @@ def leer_datos():
     registros = ws.get_all_records()
     if registros:
         return pd.DataFrame(registros)
-    return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Ultima_Actualizacion"])
+    return pd.DataFrame(columns=["Codigo", "Producto", "Stock"])
 
 def guardar_datos(df):
     ws = get_worksheet()
@@ -214,13 +214,11 @@ with tab1:
             stock_actual = int(fila["Stock"])
             
             # Mostrar datos del producto
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.metric("🔖 Código", codigo)
             with col2:
                 st.metric("📦 Stock Actual", f"{stock_actual} unidades")
-            with col3:
-                st.metric("⏰ Última Actualización", fila["Ultima_Actualizacion"])
             
             st.markdown("---")
             
@@ -247,12 +245,10 @@ with tab1:
                 disabled=boton_disabled,
                 use_container_width=True
             ):
-                ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
                 ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
                 nuevo_stock = stock_actual + ajuste
                 
                 df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
-                df.loc[df["Producto"] == producto_seleccionado, "Ultima_Actualizacion"] = ahora
                 
                 guardar_datos(df)
                 st.cache_data.clear()
@@ -299,8 +295,7 @@ with tab2:
             column_config={
                 "Codigo": st.column_config.TextColumn("🔖 Código", width="medium"),
                 "Producto": st.column_config.TextColumn("🥤 Producto", width="large"),
-                "Stock": st.column_config.NumberColumn("📦 Stock", width="medium"),
-                "Ultima_Actualizacion": st.column_config.TextColumn("⏰ Última Actualización", width="large")
+                "Stock": st.column_config.NumberColumn("📦 Stock", width="medium")
             }
         )
         
