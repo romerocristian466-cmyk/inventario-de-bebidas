@@ -3,7 +3,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
-from streamlit_qrcode_scanner import qrcode_scanner
 
 # ============================================================
 #  CONFIGURACIÓN TEMA APP
@@ -205,42 +204,11 @@ with tab1:
         
         st.markdown("---")
         
-        # Método de selección
-        metodo = st.radio(
-            "MÉTODO DE SELECCIÓN:",
-            ["📋 Seleccionar de lista", "📷 Escanear código"],
-            horizontal=True
-        )
+        # Selector de producto (solo dropdown)
+        opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
+        producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
         
-        producto_seleccionado = None
-        codigo_detectado = None
-        
-        if metodo == "📋 Seleccionar de lista":
-            # Dropdown de productos
-            opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
-            producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
-            
-            if producto_seleccionado != "--- SELECCIONA BEBIDA ---":
-                codigo_detectado = "DROPDOWN"
-        
-        else:
-            # Escáner de códigos
-            st.write("**Apunta la cámara al código de barras:**")
-            scanned_code = qrcode_scanner(key="qr_scanner")
-            
-            if scanned_code:
-                codigo_detectado = str(scanned_code).strip()
-                df["Codigo"] = df["Codigo"].astype(str)
-                
-                # Buscar el producto por código
-                if codigo_detectado in df["Codigo"].values:
-                    producto_seleccionado = df.loc[df["Codigo"] == codigo_detectado, "Producto"].values[0]
-                    st.success(f"✅ Código escaneado: {codigo_detectado}")
-                else:
-                    st.error(f"❌ Código {codigo_detectado} no encontrado en inventario")
-        
-        # Mostrar datos y procesar si hay un producto seleccionado
-        if producto_seleccionado and producto_seleccionado != "--- SELECCIONA BEBIDA ---":
+        if producto_seleccionado != "--- SELECCIONA BEBIDA ---":
             fila = df[df["Producto"] == producto_seleccionado].iloc[0]
             codigo = fila["Codigo"]
             stock_actual = int(fila["Stock"])
@@ -355,7 +323,6 @@ with tab3:
         st.write("**ESTADO DEL SISTEMA**")
         st.info("✅ Sistema operativo")
         st.info("✅ Google Sheets conectado")
-        st.info("✅ Escáner de códigos activo")
         st.info("✅ Datos sincronizados")
     
     with col2:
@@ -376,5 +343,5 @@ with tab3:
             )
     
     st.markdown("---")
-    st.caption("Soda Pro v2.0 - Sistema de Inventario con Escáner")
+    st.caption("Soda Pro v1.0 - Sistema de Inventario en la Nube")
     st.caption("© 2026 - Todos los derechos reservados")

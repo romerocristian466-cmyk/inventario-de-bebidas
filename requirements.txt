@@ -3,4 +3,3 @@ gspread
 google-auth
 pandas
 Pillow
-streamlit-qrcode-scanner
