@@ -173,6 +173,20 @@ def guardar_datos(df):
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
+def procesar_operacion(df, producto_seleccionado, cantidad, tipo_operacion):
+    """Procesa ingreso o venta"""
+    fila = df[df["Producto"] == producto_seleccionado].iloc[0]
+    stock_actual = int(fila["Stock"])
+    
+    ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
+    nuevo_stock = stock_actual + ajuste
+    
+    df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
+    guardar_datos(df)
+    st.cache_data.clear()
+    
+    return nuevo_stock
+
 # ============================================================
 #  INTERFAZ PRINCIPAL
 # ============================================================
@@ -204,32 +218,70 @@ with tab1:
         
         st.markdown("---")
         
-        # Selector de producto (solo dropdown)
-        opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
-        producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
+        # Opción: Dropdown o Escáner
+        metodo = st.radio(
+            "MÉTODO DE SELECCIÓN:",
+            ["📋 Seleccionar de lista", "🔍 Escanear código"],
+            horizontal=True
+        )
         
-        if producto_seleccionado != "--- SELECCIONA BEBIDA ---":
+        producto_seleccionado = None
+        
+        if metodo == "📋 Seleccionar de lista":
+            # OPCIÓN 1: Dropdown
+            opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
+            producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
+            
+            if producto_seleccionado == "--- SELECCIONA BEBIDA ---":
+                producto_seleccionado = None
+        
+        else:
+            # OPCIÓN 2: Escáner USB/Bluetooth - AUTOMÁTICO
+            st.info("📱 Apunta el escáner al código de barras - la búsqueda es AUTOMÁTICA e INSTANTÁNEA")
+            
+            codigo_escaneado = st.text_input(
+                "Código escaneado:",
+                placeholder="El escáner escribirá aquí automáticamente...",
+                key="scanner_input"
+            )
+            
+            # BÚSQUEDA AUTOMÁTICA E INSTANTÁNEA
+            if codigo_escaneado:
+                codigo_escaneado = codigo_escaneado.strip()
+                df["Codigo"] = df["Codigo"].astype(str)
+                
+                # Buscar el producto por código
+                if codigo_escaneado in df["Codigo"].values:
+                    producto_seleccionado = df.loc[df["Codigo"] == codigo_escaneado, "Producto"].values[0]
+                    st.success(f"✅ Producto encontrado: {producto_seleccionado}")
+                elif len(codigo_escaneado) > 0:
+                    st.warning(f"⏳ Escaneando... Código: {codigo_escaneado}")
+        
+        # Procesar si hay producto seleccionado
+        if producto_seleccionado:
             fila = df[df["Producto"] == producto_seleccionado].iloc[0]
             codigo = fila["Codigo"]
             stock_actual = int(fila["Stock"])
             
             st.markdown("---")
             
-            # Mostrar datos del producto
+            # Mostrar datos del producto - MÁS GRANDE
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("🔖 Código", codigo)
+                st.metric("🔖 Código", codigo, help="Código de barras del producto")
             with col2:
-                st.metric("📦 Stock Actual", f"{stock_actual} unidades")
+                st.metric("📦 Stock Actual", f"{stock_actual} unidades", help="Unidades disponibles")
             
             st.markdown("---")
             
-            # Entrada de cantidad
+            # Entrada de cantidad - ENFOQUE EN ESTO
+            st.subheader("Ingresa cantidad:")
             cantidad = st.number_input(
-                "CANTIDAD A REGISTRAR:",
+                "CANTIDAD:",
                 min_value=1,
                 value=1,
-                step=1
+                step=1,
+                key="cantidad_input"
             )
             
             # Validación para ventas
@@ -245,19 +297,17 @@ with tab1:
             if st.button(
                 f"{'➕ CONFIRMAR INGRESO' if 'INGRESO' in tipo_operacion else '🛒 CONFIRMAR VENTA'}",
                 disabled=boton_disabled,
-                use_container_width=True
+                use_container_width=True,
+                type="primary"
             ):
-                ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
-                nuevo_stock = stock_actual + ajuste
-                
-                df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
-                
-                guardar_datos(df)
-                st.cache_data.clear()
-                
+                nuevo_stock = procesar_operacion(df, producto_seleccionado, cantidad, tipo_operacion)
                 st.success(f"✅ {producto_seleccionado} actualizado!")
                 st.info(f"Nuevo stock: {nuevo_stock} unidades")
                 st.balloons()
+                
+                # Limpiar inputs
+                st.session_state.scanner_input = ""
+                st.session_state.cantidad_input = 1
 
 # ============================================================
 #  TAB 2: INVENTARIO
@@ -323,6 +373,7 @@ with tab3:
         st.write("**ESTADO DEL SISTEMA**")
         st.info("✅ Sistema operativo")
         st.info("✅ Google Sheets conectado")
+        st.info("✅ Escáner USB/Bluetooth automático")
         st.info("✅ Datos sincronizados")
     
     with col2:
@@ -343,5 +394,5 @@ with tab3:
             )
     
     st.markdown("---")
-    st.caption("Soda Pro v1.0 - Sistema de Inventario en la Nube")
+    st.caption("Soda Pro v3.0 - Escáner Automático e Instantáneo")
     st.caption("© 2026 - Todos los derechos reservados")
