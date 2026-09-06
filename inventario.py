@@ -14,6 +14,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Inicializar session_state
+if "scanner_input" not in st.session_state:
+    st.session_state.scanner_input = ""
+if "cantidad_input" not in st.session_state:
+    st.session_state.cantidad_input = 1
+
 # CSS PERSONALIZADO - Tema profesional
 st.markdown("""
     <style>
