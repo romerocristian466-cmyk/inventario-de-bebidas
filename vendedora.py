@@ -159,11 +159,18 @@ if "ventas_hoy" not in st.session_state:
     st.session_state.ventas_hoy = 0
 if "total_hoy" not in st.session_state:
     st.session_state.total_hoy = 0.0
+if "ultima_venta" not in st.session_state:
+    st.session_state.ultima_venta = ""
 
 # ============================================================
 #  INTERFAZ
 # ============================================================
 st.title("🛒 VENTAS")
+
+# Mensaje de última venta (persiste hasta próximo escaneo)
+if st.session_state.ultima_venta:
+    st.success(f"### 🎉 {st.session_state.ultima_venta}")
+    st.balloons()
 
 # Contador del día
 col1, col2 = st.columns(2)
@@ -191,6 +198,8 @@ else:
     
     if codigo_escaneado:
         codigo_escaneado = codigo_escaneado.strip()
+        # Limpiar mensaje anterior al escanear nuevo código
+        st.session_state.ultima_venta = ""
         
         if codigo_escaneado in df["Codigo"].values:
             fila = df[df["Codigo"] == codigo_escaneado].iloc[0]
@@ -249,12 +258,9 @@ else:
                     # Actualizar contador
                     st.session_state.ventas_hoy += 1
                     st.session_state.total_hoy += total
+                    st.session_state.ultima_venta = f"✅ {producto} - {cantidad:g} {unidad} - ${total:.2f}"
                     
                     st.cache_data.clear()
-                    st.success(f"✅ VENTA REGISTRADA - ${total:.2f}")
-                    st.balloons()
-                    
-                    # Recargar
                     st.rerun()
         else:
             # Sonido de error
