@@ -1,35 +1,29 @@
+"""
+SODA PRO - APP ADMIN
+Sistema POS completo con reportes, cortes y control total
+"""
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ============================================================
-#  CONFIGURACIÓN TEMA APP
+#  CONFIGURACIÓN
 # ============================================================
 st.set_page_config(
-    page_title="Soda Pro - Inventario",
+    page_title="Soda Pro - Admin",
     page_icon="🥤",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Inicializar session_state
-if "scanner_input" not in st.session_state:
-    st.session_state.scanner_input = ""
-if "cantidad_input" not in st.session_state:
-    st.session_state.cantidad_input = 1
-
-# CSS PERSONALIZADO - Tema profesional
+# CSS Profesional
 st.markdown("""
     <style>
-    /* Fondo general */
     .stApp {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
     }
-    
-    /* Botones grandes y redondeados */
     .stButton>button {
         width: 100%;
         border-radius: 15px;
@@ -40,104 +34,27 @@ st.markdown("""
         font-size: 16px;
         border: none;
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
     }
-    
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-    }
-    
-    /* Selectbox bonito */
-    .stSelectbox>div {
-        border-radius: 12px;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 12px 12px 0 0;
-        background-color: rgba(255,255,255,0.1);
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(255,255,255,0.3) !important;
-    }
-    
-    /* Métricas */
     [data-testid="metric-container"] {
         background: rgba(255,255,255,0.95);
         border-radius: 12px;
         padding: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    
-    /* Info boxes */
-    .stInfo {
-        background: rgba(102, 126, 234, 0.1);
-        border-left: 4px solid #667eea;
-        border-radius: 8px;
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px 12px 0 0;
+        background-color: rgba(255,255,255,0.1);
     }
-    
-    .stSuccess {
-        background: rgba(76, 175, 80, 0.1);
-        border-left: 4px solid #4caf50;
-        border-radius: 8px;
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(255,255,255,0.3) !important;
     }
-    
-    .stWarning {
-        background: rgba(255, 193, 7, 0.1);
-        border-left: 4px solid #ffc107;
-        border-radius: 8px;
-    }
-    
-    .stError {
-        background: rgba(244, 67, 54, 0.1);
-        border-left: 4px solid #f44336;
-        border-radius: 8px;
-    }
-    
-    /* Ocultar elementos de Streamlit */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Título principal */
-    h1 {
-        color: white;
-        text-align: center;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        margin-bottom: 30px;
-    }
-    
-    h2 {
-        color: white;
-        text-shadow: 0 1px 5px rgba(0,0,0,0.2);
-    }
-    
-    /* Dataframe */
-    .stDataFrame {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-    
-    /* Number input */
-    .stNumberInput>div {
-        border-radius: 12px;
-    }
-    
-    /* Text input */
-    .stTextInput>div {
-        border-radius: 12px;
-    }
+    #MainMenu, footer, header { visibility: hidden; }
+    h1, h2 { color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
     </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-#  CONFIGURACIÓN GOOGLE SHEETS
+#  GOOGLE SHEETS
 # ============================================================
 SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
 
@@ -160,71 +77,101 @@ SCOPES = [
 # ============================================================
 #  FUNCIONES
 # ============================================================
-def get_worksheet():
+def get_spreadsheet():
     creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SHEET_ID)
-    return sh.get_worksheet(0)
+    return gc.open_by_key(SHEET_ID)
+
+def get_catalog_ws():
+    return get_spreadsheet().get_worksheet(0)
+
+def get_ventas_ws():
+    """Obtiene o crea la hoja de Ventas"""
+    sh = get_spreadsheet()
+    try:
+        return sh.worksheet("Ventas")
+    except:
+        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=10)
+        ws.append_row(["Fecha", "Hora", "Codigo", "Producto", "Cantidad", 
+                      "Unidad", "Precio_Unit", "Costo_Unit", "Total", "Ganancia"])
+        return ws
 
 @st.cache_data(ttl=30)
-def leer_datos():
-    ws = get_worksheet()
+def leer_catalogo():
+    ws = get_catalog_ws()
     registros = ws.get_all_records()
     if registros:
-        return pd.DataFrame(registros)
-    return pd.DataFrame(columns=["Codigo", "Producto", "Stock"])
+        df = pd.DataFrame(registros)
+        # Limpiar valores numéricos
+        for col in ["Stock", "Costo", "Precio_Venta"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        if "Codigo" in df.columns:
+            df["Codigo"] = df["Codigo"].astype(str)
+        if "Unidad" not in df.columns:
+            df["Unidad"] = "Unidades"
+        return df
+    return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Unidad", "Costo", "Precio_Venta"])
 
-def guardar_datos(df):
-    ws = get_worksheet()
+@st.cache_data(ttl=30)
+def leer_ventas():
+    try:
+        ws = get_ventas_ws()
+        registros = ws.get_all_records()
+        if registros:
+            df = pd.DataFrame(registros)
+            for col in ["Cantidad", "Precio_Unit", "Costo_Unit", "Total", "Ganancia"]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            return df
+        return pd.DataFrame(columns=["Fecha", "Hora", "Codigo", "Producto", "Cantidad",
+                                     "Unidad", "Precio_Unit", "Costo_Unit", "Total", "Ganancia"])
+    except:
+        return pd.DataFrame()
+
+def guardar_catalogo(df):
+    ws = get_catalog_ws()
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
-def procesar_operacion(df, producto_seleccionado, cantidad, tipo_operacion):
-    """Procesa ingreso o venta"""
-    fila = df[df["Producto"] == producto_seleccionado].iloc[0]
-    stock_actual = int(fila["Stock"])
-    
-    ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
-    nuevo_stock = stock_actual + ajuste
-    
-    df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
-    guardar_datos(df)
-    st.cache_data.clear()
-    
-    return nuevo_stock
+def registrar_venta(codigo, producto, cantidad, unidad, precio, costo):
+    """Registra venta en hoja Ventas y actualiza stock"""
+    ws_ventas = get_ventas_ws()
+    ahora = datetime.now()
+    total = cantidad * precio
+    ganancia = cantidad * (precio - costo)
+    ws_ventas.append_row([
+        ahora.strftime("%Y-%m-%d"),
+        ahora.strftime("%H:%M:%S"),
+        str(codigo), producto, cantidad, unidad,
+        precio, costo, total, ganancia
+    ])
 
 # ============================================================
-#  INTERFAZ PRINCIPAL
+#  INTERFAZ
 # ============================================================
-st.title("🥤 SODA PRO")
+st.title("🥤 SODA PRO - ADMIN")
 st.markdown("---")
 
-# Tabs principales
-tab1, tab2, tab3 = st.tabs(["📲 OPERACIONES", "📊 INVENTARIO", "⚙️ SISTEMA"])
+tab1, tab2, tab3, tab4 = st.tabs(["📲 OPERACIONES", "📊 INVENTARIO", "📈 REPORTES", "⚙️ SISTEMA"])
 
 # ============================================================
 #  TAB 1: OPERACIONES
 # ============================================================
 with tab1:
-    df = leer_datos()
+    df = leer_catalogo()
     
     if df.empty:
-        st.warning("⚠️ No hay productos. Crear productos en Google Sheets primero.")
+        st.warning("⚠️ No hay productos. Agrega en Google Sheets.")
     else:
-        col1, col2 = st.columns(2)
-        with col1:
-            tipo_operacion = st.radio(
-                "TIPO DE OPERACIÓN:",
-                ["➕ INGRESO", "🛒 VENTA"],
-                horizontal=True
-            )
-        
-        with col2:
-            st.write("")  # espaciador
+        tipo_operacion = st.radio(
+            "TIPO DE OPERACIÓN:",
+            ["➕ INGRESO (Compra)", "🛒 VENTA"],
+            horizontal=True
+        )
         
         st.markdown("---")
         
-        # Opción: Dropdown o Escáner
         metodo = st.radio(
             "MÉTODO DE SELECCIÓN:",
             ["📋 Seleccionar de lista", "🔍 Escanear código"],
@@ -234,171 +181,269 @@ with tab1:
         producto_seleccionado = None
         
         if metodo == "📋 Seleccionar de lista":
-            # OPCIÓN 1: Dropdown
-            opciones = ["--- SELECCIONA BEBIDA ---"] + df["Producto"].tolist()
-            producto_seleccionado = st.selectbox("SELECCIONA LA BEBIDA:", opciones, key="prod_selector")
-            
-            if producto_seleccionado == "--- SELECCIONA BEBIDA ---":
+            opciones = ["--- SELECCIONA ---"] + df["Producto"].tolist()
+            producto_seleccionado = st.selectbox("PRODUCTO:", opciones, key="admin_dropdown")
+            if producto_seleccionado == "--- SELECCIONA ---":
                 producto_seleccionado = None
-        
         else:
-            # OPCIÓN 2: Escáner USB/Bluetooth - AUTOMÁTICO
-            st.info("📱 Apunta el escáner al código de barras - la búsqueda es AUTOMÁTICA e INSTANTÁNEA")
-            
+            st.info("📱 Apunta el escáner al código de barras")
             codigo_escaneado = st.text_input(
-                "Código escaneado:",
-                placeholder="El escáner escribirá aquí automáticamente...",
-                key="scanner_input"
+                "Código:",
+                placeholder="El escáner escribirá aquí...",
+                key="admin_scanner"
             )
-            
-            # BÚSQUEDA AUTOMÁTICA E INSTANTÁNEA
             if codigo_escaneado:
                 codigo_escaneado = codigo_escaneado.strip()
-                df["Codigo"] = df["Codigo"].astype(str)
-                
-                # Buscar el producto por código
                 if codigo_escaneado in df["Codigo"].values:
                     producto_seleccionado = df.loc[df["Codigo"] == codigo_escaneado, "Producto"].values[0]
-                    st.success(f"✅ Producto encontrado: {producto_seleccionado}")
-                elif len(codigo_escaneado) > 0:
-                    st.warning(f"⏳ Escaneando... Código: {codigo_escaneado}")
+                    st.success(f"✅ {producto_seleccionado}")
+                else:
+                    st.error(f"❌ Código {codigo_escaneado} no encontrado")
         
-        # Procesar si hay producto seleccionado
         if producto_seleccionado:
             fila = df[df["Producto"] == producto_seleccionado].iloc[0]
             codigo = fila["Codigo"]
-            stock_actual = int(fila["Stock"])
+            stock_actual = float(fila["Stock"])
+            unidad = fila.get("Unidad", "Unidades")
+            costo = float(fila.get("Costo", 0))
+            precio = float(fila.get("Precio_Venta", 0))
             
             st.markdown("---")
             
-            # Mostrar datos del producto - MÁS GRANDE
-            col1, col2 = st.columns(2)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("🔖 Código", codigo, help="Código de barras del producto")
+                st.metric("🔖 Código", codigo)
             with col2:
-                st.metric("📦 Stock Actual", f"{stock_actual} unidades", help="Unidades disponibles")
+                st.metric(f"📦 Stock", f"{stock_actual:g} {unidad}")
+            with col3:
+                st.metric("💰 Costo", f"${costo:.2f}")
+            with col4:
+                st.metric("💵 Precio", f"${precio:.2f}")
             
             st.markdown("---")
             
-            # Entrada de cantidad - ENFOQUE EN ESTO
-            st.subheader("Ingresa cantidad:")
             cantidad = st.number_input(
-                "CANTIDAD:",
-                min_value=1,
-                value=1,
-                step=1,
-                key="cantidad_input"
+                f"CANTIDAD ({unidad}):",
+                min_value=0.01,
+                value=1.0,
+                step=1.0,
+                format="%.2f"
             )
             
-            # Validación para ventas
+            # Mostrar totales si es venta
+            if "VENTA" in tipo_operacion:
+                total = cantidad * precio
+                ganancia = cantidad * (precio - costo)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("💵 Total Venta", f"${total:.2f}")
+                with col2:
+                    st.metric("📈 Ganancia", f"${ganancia:.2f}")
+            
+            # Validación
+            boton_disabled = False
             if "VENTA" in tipo_operacion and cantidad > stock_actual:
-                st.error(f"❌ Stock insuficiente. Disponible: {stock_actual} unidades")
+                st.error(f"❌ Stock insuficiente. Disponible: {stock_actual:g} {unidad}")
                 boton_disabled = True
-            else:
-                boton_disabled = False
             
             st.markdown("---")
             
-            # Botón de confirmación
             if st.button(
                 f"{'➕ CONFIRMAR INGRESO' if 'INGRESO' in tipo_operacion else '🛒 CONFIRMAR VENTA'}",
                 disabled=boton_disabled,
                 use_container_width=True,
                 type="primary"
             ):
-                nuevo_stock = procesar_operacion(df, producto_seleccionado, cantidad, tipo_operacion)
-                st.success(f"✅ {producto_seleccionado} actualizado!")
-                st.info(f"Nuevo stock: {nuevo_stock} unidades")
-                st.balloons()
+                ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
+                nuevo_stock = stock_actual + ajuste
                 
-                # Limpiar inputs
-                st.session_state.scanner_input = ""
-                st.session_state.cantidad_input = 1
+                df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
+                guardar_catalogo(df)
+                
+                # Registrar venta en historial
+                if "VENTA" in tipo_operacion:
+                    registrar_venta(codigo, producto_seleccionado, cantidad, unidad, precio, costo)
+                
+                st.cache_data.clear()
+                st.success(f"✅ {producto_seleccionado} actualizado!")
+                st.info(f"Nuevo stock: {nuevo_stock:g} {unidad}")
+                st.balloons()
 
 # ============================================================
 #  TAB 2: INVENTARIO
 # ============================================================
 with tab2:
-    df = leer_datos()
+    df = leer_catalogo()
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.subheader("📊 ESTADO DE BEBIDAS")
+        st.subheader("📊 ESTADO DEL INVENTARIO")
     with col2:
         if st.button("🔄 ACTUALIZAR"):
             st.cache_data.clear()
             st.rerun()
     
     if df.empty:
-        st.info("No hay productos registrados todavía.")
+        st.info("No hay productos registrados.")
     else:
-        # Métricas generales
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Bebidas", len(df))
+            st.metric("Total Productos", len(df))
         with col2:
-            total_unidades = int(df["Stock"].astype(int).sum())
-            st.metric("Unidades Totales", total_unidades)
+            total_unidades = df["Stock"].sum()
+            st.metric("Unidades Totales", f"{total_unidades:g}")
         with col3:
-            bajo_stock = df[df["Stock"].astype(int) <= 5]
+            valor_inventario = (df["Stock"] * df.get("Costo", 0)).sum()
+            st.metric("💰 Valor Inventario", f"${valor_inventario:.2f}")
+        with col4:
+            bajo_stock = df[df["Stock"] <= 5]
             st.metric("⚠️ Stock Bajo", len(bajo_stock))
         
         st.markdown("---")
         
-        # Tabla de inventario
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Codigo": st.column_config.TextColumn("🔖 Código", width="medium"),
-                "Producto": st.column_config.TextColumn("🥤 Producto", width="large"),
-                "Stock": st.column_config.NumberColumn("📦 Stock", width="medium")
-            }
-        )
+        st.dataframe(df, use_container_width=True, hide_index=True)
         
-        # Alerta de bajo stock
         if not bajo_stock.empty:
             st.markdown("---")
-            st.warning("⚠️ PRODUCTOS CON STOCK BAJO O AGOTADO")
-            st.dataframe(
-                bajo_stock[["Producto", "Stock"]],
-                use_container_width=True,
-                hide_index=True
+            st.warning("⚠️ PRODUCTOS CON STOCK BAJO")
+            st.dataframe(bajo_stock[["Producto", "Stock", "Unidad"]], 
+                        use_container_width=True, hide_index=True)
+
+# ============================================================
+#  TAB 3: REPORTES
+# ============================================================
+with tab3:
+    st.subheader("📈 REPORTES Y CORTES DE VENTA")
+    
+    ventas_df = leer_ventas()
+    
+    if ventas_df.empty:
+        st.info("📭 No hay ventas registradas todavía.")
+    else:
+        # Convertir fecha
+        ventas_df["Fecha"] = pd.to_datetime(ventas_df["Fecha"], errors="coerce")
+        
+        # Filtros
+        st.markdown("### 📅 FILTRAR POR FECHA")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filtro = st.selectbox(
+                "Período:",
+                ["Hoy", "Ayer", "Esta semana", "Este mes", "Personalizado", "Todo"]
+            )
+        
+        hoy = datetime.now().date()
+        
+        if filtro == "Hoy":
+            fecha_ini = fecha_fin = hoy
+        elif filtro == "Ayer":
+            fecha_ini = fecha_fin = hoy - timedelta(days=1)
+        elif filtro == "Esta semana":
+            fecha_ini = hoy - timedelta(days=hoy.weekday())
+            fecha_fin = hoy
+        elif filtro == "Este mes":
+            fecha_ini = hoy.replace(day=1)
+            fecha_fin = hoy
+        elif filtro == "Personalizado":
+            with col2:
+                fecha_ini = st.date_input("Desde:", value=hoy - timedelta(days=7))
+            with col3:
+                fecha_fin = st.date_input("Hasta:", value=hoy)
+        else:
+            fecha_ini = ventas_df["Fecha"].min().date() if not ventas_df.empty else hoy
+            fecha_fin = hoy
+        
+        # Filtrar
+        mask = (ventas_df["Fecha"].dt.date >= fecha_ini) & (ventas_df["Fecha"].dt.date <= fecha_fin)
+        ventas_periodo = ventas_df[mask]
+        
+        st.markdown("---")
+        
+        if ventas_periodo.empty:
+            st.info(f"No hay ventas en el período: {fecha_ini} a {fecha_fin}")
+        else:
+            # Métricas
+            st.markdown(f"### 💰 CORTE: {fecha_ini} a {fecha_fin}")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                total_ventas = ventas_periodo["Total"].sum()
+                st.metric("💵 Total Ventas", f"${total_ventas:.2f}")
+            with col2:
+                total_ganancia = ventas_periodo["Ganancia"].sum()
+                st.metric("📈 Ganancia", f"${total_ganancia:.2f}")
+            with col3:
+                num_ventas = len(ventas_periodo)
+                st.metric("🛒 Transacciones", num_ventas)
+            with col4:
+                unidades_vendidas = ventas_periodo["Cantidad"].sum()
+                st.metric("📦 Unidades Vendidas", f"{unidades_vendidas:g}")
+            
+            st.markdown("---")
+            
+            # Top productos
+            st.markdown("### 🏆 TOP PRODUCTOS MÁS VENDIDOS")
+            top_productos = ventas_periodo.groupby("Producto").agg({
+                "Cantidad": "sum",
+                "Total": "sum",
+                "Ganancia": "sum"
+            }).sort_values("Total", ascending=False).head(10)
+            st.dataframe(top_productos, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # Detalle de ventas
+            st.markdown("### 📋 DETALLE DE VENTAS")
+            st.dataframe(ventas_periodo.sort_values(["Fecha", "Hora"], ascending=False), 
+                        use_container_width=True, hide_index=True)
+            
+            # Descargar
+            csv = ventas_periodo.to_csv(index=False)
+            st.download_button(
+                "📥 Descargar Reporte CSV",
+                data=csv,
+                file_name=f"corte_{fecha_ini}_{fecha_fin}.csv",
+                mime="text/csv",
+                use_container_width=True
             )
 
 # ============================================================
-#  TAB 3: SISTEMA
+#  TAB 4: SISTEMA
 # ============================================================
-with tab3:
+with tab4:
     st.subheader("⚙️ CONFIGURACIÓN DEL SISTEMA")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("**ESTADO DEL SISTEMA**")
+        st.write("**ESTADO**")
         st.info("✅ Sistema operativo")
         st.info("✅ Google Sheets conectado")
-        st.info("✅ Escáner USB/Bluetooth automático")
-        st.info("✅ Datos sincronizados")
+        st.info("✅ Escáner listo")
+        st.info("✅ Registro de ventas activo")
     
     with col2:
         st.write("**ACCIONES**")
         if st.button("🔄 Sincronizar Datos", use_container_width=True):
             st.cache_data.clear()
-            st.success("✅ Datos sincronizados correctamente")
+            st.success("✅ Sincronizado")
         
-        if st.button("📥 Descargar Inventario", use_container_width=True):
-            df = leer_datos()
+        if st.button("📥 Descargar Catálogo", use_container_width=True):
+            df = leer_catalogo()
             csv = df.to_csv(index=False)
             st.download_button(
-                label="📥 Descargar CSV",
+                "📥 Descargar CSV",
                 data=csv,
-                file_name=f"inventario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
     
     st.markdown("---")
-    st.caption("Soda Pro v3.0 - Escáner Automático e Instantáneo")
-    st.caption("© 2026 - Todos los derechos reservados")
+    st.markdown("### 🔗 ENLACE PARA VENDEDORA")
+    st.info("Comparte este enlace con la vendedora (solo puede vender, no ver reportes)")
+    st.code("https://soda-vendedora.streamlit.app", language=None)
+    
+    st.markdown("---")
+    st.caption("Soda Pro v4.0 - Sistema POS Completo")
