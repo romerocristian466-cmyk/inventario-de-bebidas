@@ -85,15 +85,32 @@ def get_spreadsheet():
 def get_catalog_ws():
     return get_spreadsheet().get_worksheet(0)
 
+HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad",
+                  "Precio_Unit", "Costo_Unit", "Total", "Ganancia", "Metodo_Pago", "Cliente"]
+
 def get_ventas_ws():
-    """Obtiene o crea la hoja de Ventas"""
+    """Obtiene o crea la hoja de Ventas, asegurando encabezados actualizados"""
     sh = get_spreadsheet()
     try:
-        return sh.worksheet("Ventas")
+        ws = sh.worksheet("Ventas")
+        if ws.row_values(1) != HEADERS_VENTAS:
+            ws.update('A1', [HEADERS_VENTAS])
+        return ws
     except:
-        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=10)
-        ws.append_row(["Fecha", "Hora", "Codigo", "Producto", "Cantidad", 
-                      "Unidad", "Precio_Unit", "Costo_Unit", "Total", "Ganancia"])
+        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=12)
+        ws.append_row(HEADERS_VENTAS)
+        return ws
+
+HEADERS_FIADOS = ["Fecha", "Hora", "Cliente", "Detalle", "Total", "Estado"]
+
+def get_fiados_ws():
+    """Obtiene o crea la hoja de Fiados (clientes con deuda pendiente)"""
+    sh = get_spreadsheet()
+    try:
+        return sh.worksheet("Fiados")
+    except:
+        ws = sh.add_worksheet(title="Fiados", rows=500, cols=6)
+        ws.append_row(HEADERS_FIADOS)
         return ws
 
 @st.cache_data(ttl=30)
@@ -124,8 +141,7 @@ def leer_ventas():
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
             return df
-        return pd.DataFrame(columns=["Fecha", "Hora", "Codigo", "Producto", "Cantidad",
-                                     "Unidad", "Precio_Unit", "Costo_Unit", "Total", "Ganancia"])
+        return pd.DataFrame(columns=HEADERS_VENTAS)
     except:
         return pd.DataFrame()
 
@@ -134,7 +150,7 @@ def guardar_catalogo(df):
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
-def registrar_venta(codigo, producto, cantidad, unidad, precio, costo):
+def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente=""):
     """Registra venta en hoja Ventas y actualiza stock"""
     ws_ventas = get_ventas_ws()
     ahora = datetime.now()
@@ -144,7 +160,7 @@ def registrar_venta(codigo, producto, cantidad, unidad, precio, costo):
         ahora.strftime("%Y-%m-%d"),
         ahora.strftime("%H:%M:%S"),
         str(codigo), producto, cantidad, unidad,
-        precio, costo, total, ganancia
+        precio, costo, total, ganancia, metodo_pago, cliente
     ])
 
 # ============================================================
