@@ -354,34 +354,50 @@ with tab3:
     df_prod = leer_catalogo()
 
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
+        st.write("**Tip:** Deja el código vacío para generar uno automático (INT001, INT002...)")
+        
         with st.form("form_agregar_producto", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                n_codigo = st.text_input("Código de barras:")
+                n_codigo = st.text_input("Código de barras (opcional):")
                 n_producto = st.text_input("Nombre del producto:")
                 n_stock = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
             with col2:
-                n_unidad = st.selectbox("Unidad:", ["Unidades", "Libras", "Kilos", "Otro"])
-                n_costo = st.number_input("Costo:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
-                n_precio = st.number_input("Precio de venta:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+                unidades_disponibles = ["Unidades", "Media Libra", "Libra", "Kilo", "Saco", "Docena", "Bolsa", "Otro"]
+                n_unidad = st.selectbox("Unidad de medida:", unidades_disponibles)
+                n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+                n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
 
             enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
 
             if enviado:
-                n_codigo = n_codigo.strip()
-                if not n_codigo or not n_producto.strip():
-                    st.error("❌ El código y el nombre son obligatorios")
-                elif not df_prod.empty and n_codigo in df_prod["Codigo"].values:
-                    st.error(f"❌ Ya existe un producto con el código {n_codigo}")
+                n_codigo_limpio = n_codigo.strip()
+                
+                # Generar código interno si está vacío
+                if not n_codigo_limpio:
+                    if df_prod.empty:
+                        n_codigo_limpio = "INT001"
+                    else:
+                        codigos_int = df_prod[df_prod["Codigo"].str.startswith("INT")]["Codigo"].tolist()
+                        if codigos_int:
+                            ultimo_num = max([int(c[3:]) for c in codigos_int if c[3:].isdigit()])
+                            n_codigo_limpio = f"INT{ultimo_num + 1:03d}"
+                        else:
+                            n_codigo_limpio = "INT001"
+                
+                if not n_producto.strip():
+                    st.error("❌ El nombre del producto es obligatorio")
+                elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
+                    st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
                 else:
                     nueva_fila = pd.DataFrame([{
-                        "Codigo": n_codigo, "Producto": n_producto.strip(), "Stock": n_stock,
+                        "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
                         "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
                     }])
                     df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
                     guardar_catalogo(df_actualizado)
                     st.cache_data.clear()
-                    st.success(f"✅ {n_producto} agregado al catálogo")
+                    st.success(f"✅ {n_producto} agregado (código: {n_codigo_limpio})")
                     st.rerun()
 
     st.markdown("---")
@@ -399,13 +415,13 @@ with tab3:
                 e_producto = st.text_input("Nombre:", value=fila["Producto"], key="e_nombre")
                 e_stock = st.number_input("Stock:", min_value=0.0, value=float(fila["Stock"]), step=1.0, key="e_stock")
             with col2:
-                unidades_op = ["Unidades", "Libras", "Kilos", "Otro"]
+                unidades_op = ["Unidades", "Media Libra", "Libra", "Kilo", "Saco", "Docena", "Bolsa", "Otro"]
                 unidad_actual = fila.get("Unidad", "Unidades")
                 idx_unidad = unidades_op.index(unidad_actual) if unidad_actual in unidades_op else 0
-                e_unidad = st.selectbox("Unidad:", unidades_op, index=idx_unidad, key="e_unidad")
-                e_costo = st.number_input("Costo:", min_value=0.0, value=float(fila.get("Costo", 0)),
+                e_unidad = st.selectbox("Unidad de medida:", unidades_op, index=idx_unidad, key="e_unidad")
+                e_costo = st.number_input("Costo unitario:", min_value=0.0, value=float(fila.get("Costo", 0)),
                                           step=0.01, format="%.2f", key="e_costo")
-                e_precio = st.number_input("Precio de venta:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
+                e_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
                                            step=0.01, format="%.2f", key="e_precio")
 
             if st.button("💾 GUARDAR CAMBIOS", use_container_width=True, type="primary", key="guardar_edicion"):
