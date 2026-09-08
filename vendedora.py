@@ -98,16 +98,11 @@ st.markdown("""
 # ============================================================
 SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
 
-CREDENTIALS = {
-    "type": "service_account",
-    "project_id": "speedy-filament-414621",
-    "private_key_id": "755ba08c379b33c9d43dd960fd30c59a09684cce",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCzojW5F7S2r6/p\noGRl8BO2tuo27jgYcSRwaAyQgvHnsieqmflCIPQUoUK/CqydPBZU+8WkzJ+NXaVg\nDZ1PQ8rYhodZ0x/0y2zgHAH68i9JEeYpXFNLn5kPYvnmbGz4LZzgnOOcKhvdAPiv\ndfYrT1eMC5qMbntXp7Ir8ZZCgWWRl/Ob2C/x5AFQ6JIckQ4EDH3NCQY7D3Oe1F64\nAlGVx8obgXbURrCo9bZ8BDCkvbA0qk84L3JgEXDyf+01n/ej9dwOeD5IdhqxdHpI\nmbEZJbjX5QtlxwQ9k8QsKdSsAldV4HPkmghdvzshXQhr+6rO6hU9Uzm3UrGeRrMR\nROZqM6zlAgMBAAECggEAJzlC9lLbEq37oS205n5c6592tn5fUNT5wjKyFacGF9PS\nrgGXiA1Ghq+ssabsyJuLe8yLHGBS8Y0SdI4cfKeephd//Ajp+CuoLypmc0uJMDEg\nmwTuKjvj8dRooVwpEirxj6kqWRnnwiL5amS9VzkosmuBOGtScvIq6UYEC6sSCM9x\nysEbIrzWG2moNFLAmNSGsU7T3wMigO5oHCtaSIF3TmBFp1Gez8i+cHJk0Xx5Z70X\nBgWRfyCGBsCXJcI/wB58U24LXQxM55B7b3roxqHl9/cOLL4jAdDgFpGfWLxbbHQ9\n4NkuF62+ljaQGnlzHSuZvLd3H0YuEPjaUmvOHYwIAQKBgQDX6LHx3bQVVZo1/3ES\n8u5l3BxBwu2WJQHoR3A2MHuqD390DB6WQubvsdJyiqGfEqs66bS6U7xPlU/GNl+4\nL9RvFib8N0Qz7iUGEZrHldJIDvPmluWivX/DPl67V3QQrH7BYfNpwennSDyWjN5i\nM0OL+tDAfaBykTcFFshF3xYE5QKBgQDU/SeYWLHWJLJ4d/eqCTHjOXFy8jxE+RxC\neFOO2eQGwRl+lmI/98Tz0pnMvND5YqzXlFS0Ms/f9dpjcpgLNdqRNfB4yxRXGd6h\netbRVbtksbikeV00uWt6u8VrrVq/YcEmBjZGplHAaz5geTrDeVANWBScBAcLWATN\nWM0g0jSIAQKBgQCNoCDhY6lV+UHfu8CDSoEgpcKPTHsmav4WTI4JrcHgqqvTBoQl\n0prDjiRaaB9eRhO14Elhk73JgkrC3TXqjs1NVP2bofEGE2eL1I5v7xHxnIVWs5LM\nLnuZKddgEhybN1sqJMNTkxSIVrUPmDXjunbLYmn+aimOHT03BFu4oX5DFQKBgEp9\ns8BznNcBhK3ff24nwxvudkA2el/BJGIXBVpb2IWIOattWzV2KZsBGCtkCk5+dWb8\niNdxQgTZTqUjagvZrPTGgbEtjZKdCKE/fiw+qMih46saiz+qbe3CCF0Nh0SSIuRy\nnb794m/C0lEZdTTyk83m9WZPfks4YI2VNkD5Y8gBAoGAeWGd1N2bqgxKKKWxwWyD\nuTEzoLOciRDlo9zpX0D5UpA5AM3YGXhLVdmMtf8/md6Yr2rr2iDuoORb11uq6Abo\nRoQdW6nVtoqLn76AaTURC0ntHJXe1gsOGW5JXptXGHBe+ChbWL5Ke8ftay8M4Cjs\nAMzvC8b0ReF1FK1IJu9ohsA=\n-----END PRIVATE KEY-----\n",
-    "client_email": "inventario-de-bebidas@speedy-filament-414621.iam.gserviceaccount.com",
-    "client_id": "116633712768836452590",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token"
-}
+try:
+    CREDENTIALS = dict(st.secrets["google_credentials"])
+except Exception:
+    st.error("⚠️ Faltan las credenciales de Google. Pídele al administrador que configure los 'Secrets' de esta app.")
+    st.stop()
 
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
@@ -214,16 +209,80 @@ def generar_ticket(carrito, total, metodo_pago, monto_recibido=None, cambio=None
 defaults = {
     "carrito": [], "ventas_hoy": 0, "total_hoy": 0.0,
     "ticket_texto": None, "ticket_link": None,
-    "input_counter": 0, "venta_counter": 0,
+    "input_counter": 0, "venta_counter": 0, "busqueda_counter": 0,
+    "ultima_venta_carrito": [], "ultima_venta_metodo": "", "ultima_venta_total": 0.0,
+    "flash": None,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+def agregar_al_carrito(df, codigo):
+    """Busca el código en el catálogo y lo agrega (o suma 1) al carrito.
+       Devuelve True si lo encontró, False si no existe."""
+    if codigo not in df["Codigo"].values:
+        return False
+
+    fila = df[df["Codigo"] == codigo].iloc[0]
+
+    for item in st.session_state.carrito:
+        if item["codigo"] == codigo:
+            item["cantidad"] += 1
+            item["subtotal"] = item["cantidad"] * item["precio"]
+            return True
+
+    st.session_state.carrito.append({
+        "codigo": codigo, "producto": fila["Producto"], "cantidad": 1,
+        "unidad": fila.get("Unidad", "Unidades"),
+        "precio": float(fila.get("Precio_Venta", 0)), "costo": float(fila.get("Costo", 0)),
+        "subtotal": float(fila.get("Precio_Venta", 0)), "stock_disponible": float(fila["Stock"])
+    })
+    return True
+
+def deshacer_ultima_venta():
+    """Repone stock y borra los registros de la última venta confirmada"""
+    df_actual = leer_catalogo()
+    for item in st.session_state.ultima_venta_carrito:
+        idx = df_actual[df_actual["Codigo"] == item["codigo"]].index
+        if len(idx):
+            df_actual.at[idx[0], "Stock"] = df_actual.at[idx[0], "Stock"] + item["cantidad"]
+    guardar_catalogo(df_actual)
+
+    try:
+        ws_v = get_ventas_ws()
+        total_filas = len(ws_v.get_all_values())
+        n = len(st.session_state.ultima_venta_carrito)
+        if n > 0 and total_filas > n:
+            ws_v.delete_rows(total_filas - n + 1, total_filas)
+    except Exception:
+        pass
+
+    if st.session_state.ultima_venta_metodo == "Fiado":
+        try:
+            ws_f = get_fiados_ws()
+            total_f = len(ws_f.get_all_values())
+            if total_f > 1:
+                ws_f.delete_rows(total_f)
+        except Exception:
+            pass
+
+    st.session_state.ventas_hoy = max(0, st.session_state.ventas_hoy - 1)
+    st.session_state.total_hoy = max(0.0, st.session_state.total_hoy - st.session_state.ultima_venta_total)
+    st.session_state.ticket_texto = None
+    st.session_state.ticket_link = None
+    st.session_state.ultima_venta_carrito = []
+    st.session_state.venta_counter += 1
+    st.session_state.flash = "↩️ Venta corregida. El stock fue restaurado."
+    st.cache_data.clear()
+
 # ============================================================
 #  INTERFAZ
 # ============================================================
 st.title("🛒 PUNTO DE VENTA")
+
+if st.session_state.flash:
+    st.info(st.session_state.flash)
+    st.session_state.flash = None
 
 # Ticket de la última venta (persiste hasta la próxima acción)
 if st.session_state.ticket_texto:
@@ -231,18 +290,29 @@ if st.session_state.ticket_texto:
     st.markdown(f'<div class="ticket-box">{st.session_state.ticket_texto}</div>', unsafe_allow_html=True)
     if st.session_state.ticket_link:
         st.link_button("📲 Enviar por WhatsApp", st.session_state.ticket_link, use_container_width=True)
-    if st.button("🆕 NUEVA VENTA", use_container_width=True):
-        st.session_state.ticket_texto = None
-        st.session_state.ticket_link = None
-        st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("↩️ CORREGIR (anular)", use_container_width=True):
+            deshacer_ultima_venta()
+            st.rerun()
+    with col2:
+        if st.button("🆕 NUEVA VENTA", use_container_width=True):
+            st.session_state.ticket_texto = None
+            st.session_state.ticket_link = None
+            st.rerun()
     st.markdown("---")
 
-# Contadores del día
-col1, col2 = st.columns(2)
+# Contadores del día + botón actualizar
+col1, col2, col3 = st.columns([2, 2, 1])
 with col1:
     st.metric("🛒 Ventas HOY", st.session_state.ventas_hoy)
 with col2:
     st.metric("💵 Total HOY", f"${st.session_state.total_hoy:.2f}")
+with col3:
+    st.write("")
+    if st.button("🔄", use_container_width=True, help="Actualizar datos"):
+        st.cache_data.clear()
+        st.rerun()
 
 st.markdown("---")
 
@@ -268,34 +338,25 @@ else:
         st.session_state.ticket_texto = None
         st.session_state.ticket_link = None
 
-        if codigo_escaneado in df["Codigo"].values:
-            fila = df[df["Codigo"] == codigo_escaneado].iloc[0]
-            producto = fila["Producto"]
-            stock_actual = float(fila["Stock"])
-            unidad = fila.get("Unidad", "Unidades")
-            precio = float(fila.get("Precio_Venta", 0))
-            costo = float(fila.get("Costo", 0))
-
-            en_carrito = False
-            for item in st.session_state.carrito:
-                if item["codigo"] == codigo_escaneado:
-                    item["cantidad"] += 1
-                    item["subtotal"] = item["cantidad"] * item["precio"]
-                    en_carrito = True
-                    break
-
-            if not en_carrito:
-                st.session_state.carrito.append({
-                    "codigo": codigo_escaneado, "producto": producto, "cantidad": 1,
-                    "unidad": unidad, "precio": precio, "costo": costo,
-                    "subtotal": precio, "stock_disponible": stock_actual
-                })
-
-            st.session_state.input_counter += 1
-            st.rerun()
-        else:
+        if not agregar_al_carrito(df, codigo_escaneado):
             st.error(f"❌ Código {codigo_escaneado} NO existe")
-            st.session_state.input_counter += 1
+
+        st.session_state.input_counter += 1
+        st.rerun()
+
+    with st.expander("🔎 ¿No lee el código? Busca el producto por nombre"):
+        opciones_busqueda = ["--- Selecciona un producto ---"] + sorted(df["Producto"].dropna().unique().tolist())
+        seleccion = st.selectbox(
+            "Producto:", opciones_busqueda,
+            key=f"buscar_{st.session_state.busqueda_counter}",
+            label_visibility="collapsed"
+        )
+        if seleccion != "--- Selecciona un producto ---":
+            codigo_sel = str(df.loc[df["Producto"] == seleccion, "Codigo"].values[0])
+            st.session_state.ticket_texto = None
+            st.session_state.ticket_link = None
+            agregar_al_carrito(df, codigo_sel)
+            st.session_state.busqueda_counter += 1
             st.rerun()
 
     st.markdown("---")
@@ -340,11 +401,12 @@ else:
         #  MÉTODO DE PAGO
         # ============================================================
         st.markdown("### 💳 MÉTODO DE PAGO")
-        metodo_pago = st.radio(
-            "Método:", ["💵 Efectivo", "🏦 Transferencia", "📝 Fiado"],
+        metodo_opciones = {"💵 Efectivo": "Efectivo", "🏦 Transferencia": "Transferencia", "📝 Fiado": "Fiado"}
+        metodo_pago_raw = st.radio(
+            "Método:", list(metodo_opciones.keys()),
             horizontal=True, key=f"metodo_{st.session_state.venta_counter}", label_visibility="collapsed"
         )
-        metodo_pago = metodo_pago.split(" ", 1)[1]  # quitar emoji
+        metodo_pago = metodo_opciones[metodo_pago_raw]
 
         monto_recibido, cambio, cliente = None, None, ""
         puede_cobrar = True
@@ -414,6 +476,10 @@ else:
                     )
                     st.session_state.ticket_texto = ticket
                     st.session_state.ticket_link = "https://api.whatsapp.com/send?text=" + urllib.parse.quote(ticket)
+
+                    st.session_state.ultima_venta_carrito = list(st.session_state.carrito)
+                    st.session_state.ultima_venta_metodo = metodo_pago
+                    st.session_state.ultima_venta_total = total_carrito
 
                     st.session_state.ventas_hoy += 1
                     st.session_state.total_hoy += total_carrito

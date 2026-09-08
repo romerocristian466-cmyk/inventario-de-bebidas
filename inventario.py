@@ -58,16 +58,11 @@ st.markdown("""
 # ============================================================
 SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
 
-CREDENTIALS = {
-    "type": "service_account",
-    "project_id": "speedy-filament-414621",
-    "private_key_id": "755ba08c379b33c9d43dd960fd30c59a09684cce",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCzojW5F7S2r6/p\noGRl8BO2tuo27jgYcSRwaAyQgvHnsieqmflCIPQUoUK/CqydPBZU+8WkzJ+NXaVg\nDZ1PQ8rYhodZ0x/0y2zgHAH68i9JEeYpXFNLn5kPYvnmbGz4LZzgnOOcKhvdAPiv\ndfYrT1eMC5qMbntXp7Ir8ZZCgWWRl/Ob2C/x5AFQ6JIckQ4EDH3NCQY7D3Oe1F64\nAlGVx8obgXbURrCo9bZ8BDCkvbA0qk84L3JgEXDyf+01n/ej9dwOeD5IdhqxdHpI\nmbEZJbjX5QtlxwQ9k8QsKdSsAldV4HPkmghdvzshXQhr+6rO6hU9Uzm3UrGeRrMR\nROZqM6zlAgMBAAECggEAJzlC9lLbEq37oS205n5c6592tn5fUNT5wjKyFacGF9PS\nrgGXiA1Ghq+ssabsyJuLe8yLHGBS8Y0SdI4cfKeephd//Ajp+CuoLypmc0uJMDEg\nmwTuKjvj8dRooVwpEirxj6kqWRnnwiL5amS9VzkosmuBOGtScvIq6UYEC6sSCM9x\nysEbIrzWG2moNFLAmNSGsU7T3wMigO5oHCtaSIF3TmBFp1Gez8i+cHJk0Xx5Z70X\nBgWRfyCGBsCXJcI/wB58U24LXQxM55B7b3roxqHl9/cOLL4jAdDgFpGfWLxbbHQ9\n4NkuF62+ljaQGnlzHSuZvLd3H0YuEPjaUmvOHYwIAQKBgQDX6LHx3bQVVZo1/3ES\n8u5l3BxBwu2WJQHoR3A2MHuqD390DB6WQubvsdJyiqGfEqs66bS6U7xPlU/GNl+4\nL9RvFib8N0Qz7iUGEZrHldJIDvPmluWivX/DPl67V3QQrH7BYfNpwennSDyWjN5i\nM0OL+tDAfaBykTcFFshF3xYE5QKBgQDU/SeYWLHWJLJ4d/eqCTHjOXFy8jxE+RxC\neFOO2eQGwRl+lmI/98Tz0pnMvND5YqzXlFS0Ms/f9dpjcpgLNdqRNfB4yxRXGd6h\netbRVbtksbikeV00uWt6u8VrrVq/YcEmBjZGplHAaz5geTrDeVANWBScBAcLWATN\nWM0g0jSIAQKBgQCNoCDhY6lV+UHfu8CDSoEgpcKPTHsmav4WTI4JrcHgqqvTBoQl\n0prDjiRaaB9eRhO14Elhk73JgkrC3TXqjs1NVP2bofEGE2eL1I5v7xHxnIVWs5LM\nLnuZKddgEhybN1sqJMNTkxSIVrUPmDXjunbLYmn+aimOHT03BFu4oX5DFQKBgEp9\ns8BznNcBhK3ff24nwxvudkA2el/BJGIXBVpb2IWIOattWzV2KZsBGCtkCk5+dWb8\niNdxQgTZTqUjagvZrPTGgbEtjZKdCKE/fiw+qMih46saiz+qbe3CCF0Nh0SSIuRy\nnb794m/C0lEZdTTyk83m9WZPfks4YI2VNkD5Y8gBAoGAeWGd1N2bqgxKKKWxwWyD\nuTEzoLOciRDlo9zpX0D5UpA5AM3YGXhLVdmMtf8/md6Yr2rr2iDuoORb11uq6Abo\nRoQdW6nVtoqLn76AaTURC0ntHJXe1gsOGW5JXptXGHBe+ChbWL5Ke8ftay8M4Cjs\nAMzvC8b0ReF1FK1IJu9ohsA=\n-----END PRIVATE KEY-----\n",
-    "client_email": "inventario-de-bebidas@speedy-filament-414621.iam.gserviceaccount.com",
-    "client_id": "116633712768836452590",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token"
-}
+try:
+    CREDENTIALS = dict(st.secrets["google_credentials"])
+except Exception:
+    st.error("⚠️ Faltan las credenciales de Google. Configúralas en Settings → Secrets de esta app en Streamlit Cloud.")
+    st.stop()
 
 SCOPES = [
     "https://spreadsheets.google.com/feeds",
@@ -150,6 +145,30 @@ def guardar_catalogo(df):
     ws.clear()
     ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
 
+@st.cache_data(ttl=30)
+def leer_fiados():
+    ws = get_fiados_ws()
+    registros = ws.get_all_records()
+    if registros:
+        df = pd.DataFrame(registros)
+        if "Total" in df.columns:
+            df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
+        return df
+    return pd.DataFrame(columns=HEADERS_FIADOS)
+
+def marcar_fiados_pagados(cliente):
+    """Marca como Pagado todas las filas Pendientes de un cliente"""
+    ws = get_fiados_ws()
+    valores = ws.get_all_values()
+    if not valores:
+        return
+    header = valores[0]
+    col_cliente = header.index("Cliente")
+    col_estado = header.index("Estado")
+    for i, row in enumerate(valores[1:], start=2):
+        if len(row) > col_estado and row[col_cliente] == cliente and row[col_estado] == "Pendiente":
+            ws.update_cell(i, col_estado + 1, "Pagado")
+
 def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente=""):
     """Registra venta en hoja Ventas y actualiza stock"""
     ws_ventas = get_ventas_ws()
@@ -169,7 +188,9 @@ def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pa
 st.title("🥤 SODA PRO - ADMIN")
 st.markdown("---")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📲 OPERACIONES", "📊 INVENTARIO", "📈 REPORTES", "⚙️ SISTEMA"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📲 OPERACIONES", "📊 INVENTARIO", "📦 PRODUCTOS", "📈 REPORTES", "👥 FIADOS", "⚙️ SISTEMA"]
+)
 
 # ============================================================
 #  TAB 1: OPERACIONES
@@ -326,9 +347,92 @@ with tab2:
                         use_container_width=True, hide_index=True)
 
 # ============================================================
-#  TAB 3: REPORTES
+#  TAB 3: PRODUCTOS (agregar / editar / eliminar)
 # ============================================================
 with tab3:
+    st.subheader("📦 GESTIÓN DE PRODUCTOS")
+    df_prod = leer_catalogo()
+
+    with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
+        with st.form("form_agregar_producto", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                n_codigo = st.text_input("Código de barras:")
+                n_producto = st.text_input("Nombre del producto:")
+                n_stock = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
+            with col2:
+                n_unidad = st.selectbox("Unidad:", ["Unidades", "Libras", "Kilos", "Otro"])
+                n_costo = st.number_input("Costo:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+                n_precio = st.number_input("Precio de venta:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+
+            enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
+
+            if enviado:
+                n_codigo = n_codigo.strip()
+                if not n_codigo or not n_producto.strip():
+                    st.error("❌ El código y el nombre son obligatorios")
+                elif not df_prod.empty and n_codigo in df_prod["Codigo"].values:
+                    st.error(f"❌ Ya existe un producto con el código {n_codigo}")
+                else:
+                    nueva_fila = pd.DataFrame([{
+                        "Codigo": n_codigo, "Producto": n_producto.strip(), "Stock": n_stock,
+                        "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
+                    }])
+                    df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
+                    guardar_catalogo(df_actualizado)
+                    st.cache_data.clear()
+                    st.success(f"✅ {n_producto} agregado al catálogo")
+                    st.rerun()
+
+    st.markdown("---")
+
+    if df_prod.empty:
+        st.info("Agrega tu primer producto arriba para poder editarlo o eliminarlo.")
+    else:
+        with st.expander("✏️ EDITAR PRODUCTO"):
+            producto_editar = st.selectbox("Selecciona producto:", df_prod["Producto"].tolist(), key="editar_select")
+            idx = df_prod[df_prod["Producto"] == producto_editar].index[0]
+            fila = df_prod.loc[idx]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                e_producto = st.text_input("Nombre:", value=fila["Producto"], key="e_nombre")
+                e_stock = st.number_input("Stock:", min_value=0.0, value=float(fila["Stock"]), step=1.0, key="e_stock")
+            with col2:
+                unidades_op = ["Unidades", "Libras", "Kilos", "Otro"]
+                unidad_actual = fila.get("Unidad", "Unidades")
+                idx_unidad = unidades_op.index(unidad_actual) if unidad_actual in unidades_op else 0
+                e_unidad = st.selectbox("Unidad:", unidades_op, index=idx_unidad, key="e_unidad")
+                e_costo = st.number_input("Costo:", min_value=0.0, value=float(fila.get("Costo", 0)),
+                                          step=0.01, format="%.2f", key="e_costo")
+                e_precio = st.number_input("Precio de venta:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
+                                           step=0.01, format="%.2f", key="e_precio")
+
+            if st.button("💾 GUARDAR CAMBIOS", use_container_width=True, type="primary", key="guardar_edicion"):
+                df_prod.at[idx, "Producto"] = e_producto.strip()
+                df_prod.at[idx, "Stock"] = e_stock
+                df_prod.at[idx, "Unidad"] = e_unidad
+                df_prod.at[idx, "Costo"] = e_costo
+                df_prod.at[idx, "Precio_Venta"] = e_precio
+                guardar_catalogo(df_prod)
+                st.cache_data.clear()
+                st.success(f"✅ {e_producto} actualizado")
+                st.rerun()
+
+        with st.expander("🗑️ ELIMINAR PRODUCTO"):
+            producto_eliminar = st.selectbox("Selecciona producto a eliminar:", df_prod["Producto"].tolist(), key="eliminar_select")
+            confirmar = st.checkbox(f"Sí, quiero eliminar '{producto_eliminar}' permanentemente")
+            if st.button("🗑️ ELIMINAR PRODUCTO", use_container_width=True, disabled=not confirmar, key="btn_eliminar"):
+                df_actualizado = df_prod[df_prod["Producto"] != producto_eliminar]
+                guardar_catalogo(df_actualizado)
+                st.cache_data.clear()
+                st.success(f"✅ {producto_eliminar} eliminado del catálogo")
+                st.rerun()
+
+# ============================================================
+#  TAB 4: REPORTES
+# ============================================================
+with tab4:
     st.subheader("📈 REPORTES Y CORTES DE VENTA")
     
     ventas_df = leer_ventas()
@@ -397,7 +501,19 @@ with tab3:
                 st.metric("📦 Unidades Vendidas", f"{unidades_vendidas:g}")
             
             st.markdown("---")
-            
+
+            # Corte por método de pago
+            if "Metodo_Pago" in ventas_periodo.columns:
+                st.markdown("### 💳 CORTE POR MÉTODO DE PAGO")
+                metodo_col = ventas_periodo["Metodo_Pago"].replace("", "Sin especificar").fillna("Sin especificar")
+                por_metodo = ventas_periodo.groupby(metodo_col)["Total"].sum().sort_values(ascending=False)
+                iconos = {"Efectivo": "💵", "Transferencia": "🏦", "Fiado": "📝", "Sin especificar": "❔"}
+                cols_metodo = st.columns(len(por_metodo))
+                for col, (metodo, monto) in zip(cols_metodo, por_metodo.items()):
+                    with col:
+                        st.metric(f"{iconos.get(metodo, '💳')} {metodo}", f"${monto:.2f}")
+                st.markdown("---")
+
             # Top productos
             st.markdown("### 🏆 TOP PRODUCTOS MÁS VENDIDOS")
             top_productos = ventas_periodo.groupby("Producto").agg({
@@ -427,7 +543,61 @@ with tab3:
 # ============================================================
 #  TAB 4: SISTEMA
 # ============================================================
-with tab4:
+with tab5:
+    st.subheader("👥 CLIENTES FIADOS")
+
+    fiados_df = leer_fiados()
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.caption("Aquí liquidas a un cliente cuando venga a pagar su deuda")
+    with col2:
+        if st.button("🔄 Actualizar", key="refresh_fiados"):
+            st.cache_data.clear()
+            st.rerun()
+
+    if fiados_df.empty:
+        st.info("📭 No hay registros de fiado todavía.")
+    else:
+        pendientes = fiados_df[fiados_df["Estado"] == "Pendiente"]
+
+        if pendientes.empty:
+            st.success("✅ No hay deudas pendientes. Todo al día.")
+        else:
+            resumen = pendientes.groupby("Cliente")["Total"].sum().sort_values(ascending=False)
+
+            st.markdown(f"### 💰 TOTAL POR COBRAR: ${pendientes['Total'].sum():.2f}")
+            st.markdown("---")
+
+            for cliente, monto in resumen.items():
+                col1, col2, col3 = st.columns([3, 2, 2])
+                with col1:
+                    st.markdown(f"**👤 {cliente}**")
+                with col2:
+                    st.markdown(f"### ${monto:.2f}")
+                with col3:
+                    if st.button("✅ Marcar pagado", key=f"pagar_{cliente}", use_container_width=True):
+                        marcar_fiados_pagados(cliente)
+                        st.cache_data.clear()
+                        st.success(f"✅ {cliente} liquidado")
+                        st.rerun()
+                st.markdown("---")
+
+            with st.expander("📋 Ver detalle de deudas pendientes"):
+                st.dataframe(
+                    pendientes[["Fecha", "Hora", "Cliente", "Detalle", "Total"]],
+                    use_container_width=True, hide_index=True
+                )
+
+        pagados = fiados_df[fiados_df["Estado"] == "Pagado"]
+        if not pagados.empty:
+            with st.expander(f"✅ Historial de fiados pagados ({len(pagados)})"):
+                st.dataframe(
+                    pagados[["Fecha", "Hora", "Cliente", "Detalle", "Total"]],
+                    use_container_width=True, hide_index=True
+                )
+
+with tab6:
     st.subheader("⚙️ CONFIGURACIÓN DEL SISTEMA")
     
     col1, col2 = st.columns(2)
