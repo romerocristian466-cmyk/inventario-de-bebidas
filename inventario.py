@@ -7,6 +7,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime, timedelta
+import random
 
 # ============================================================
 #  CONFIGURACIÓN
@@ -17,6 +18,25 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# ============================================================
+#  GENERADOR DE CÓDIGOS EAN-13
+# ============================================================
+def generar_codigo_ean13():
+    """Genera un código EAN-13 válido con checksum correcto"""
+    # Primero 12 dígitos: 500 + 9 aleatorios (500 es prefijo para uso interno)
+    base = '500' + ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    
+    # Calcular dígito de verificación (checksum EAN-13)
+    suma = 0
+    for i, digito in enumerate(base):
+        if i % 2 == 0:
+            suma += int(digito)
+        else:
+            suma += int(digito) * 3
+    checksum = (10 - (suma % 10)) % 10
+    
+    return base + str(checksum)
 
 # CSS Profesional
 st.markdown("""
@@ -354,12 +374,12 @@ with tab3:
     df_prod = leer_catalogo()
 
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
-        st.write("**Tip:** Deja el código vacío para generar uno automático (INT001, INT002...)")
+        st.write("**Tip:** Deja el código vacío para generar uno automático (EAN-13 válido, escaneable)")
         
         with st.form("form_agregar_producto", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                n_codigo = st.text_input("Código de barras (opcional):")
+                n_codigo = st.text_input("Código de barras (opcional - dejar vacío para generar):")
                 n_producto = st.text_input("Nombre del producto:")
                 n_stock = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
             with col2:
@@ -373,17 +393,9 @@ with tab3:
             if enviado:
                 n_codigo_limpio = n_codigo.strip()
                 
-                # Generar código interno si está vacío
+                # Generar código EAN-13 si está vacío
                 if not n_codigo_limpio:
-                    if df_prod.empty:
-                        n_codigo_limpio = "INT001"
-                    else:
-                        codigos_int = df_prod[df_prod["Codigo"].str.startswith("INT")]["Codigo"].tolist()
-                        if codigos_int:
-                            ultimo_num = max([int(c[3:]) for c in codigos_int if c[3:].isdigit()])
-                            n_codigo_limpio = f"INT{ultimo_num + 1:03d}"
-                        else:
-                            n_codigo_limpio = "INT001"
+                    n_codigo_limpio = generar_codigo_ean13()
                 
                 if not n_producto.strip():
                     st.error("❌ El nombre del producto es obligatorio")
@@ -397,8 +409,33 @@ with tab3:
                     df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
                     guardar_catalogo(df_actualizado)
                     st.cache_data.clear()
-                    st.success(f"✅ {n_producto} agregado (código: {n_codigo_limpio})")
+                    st.success(f"✅ {n_producto} agregado")
+                    st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
                     st.rerun()
+
+    st.markdown("---")
+
+    # Mostrar códigos generados para anotar en libreta
+    if not df_prod.empty:
+        with st.expander("📋 VER TODOS LOS CÓDIGOS (para anotar en libreta)"):
+            st.write("**Copia estos códigos a tu libreta — la vendedora los escaneará con la pistola:**")
+            st.markdown("---")
+            
+            codigos_display = df_prod[["Codigo", "Producto", "Unidad"]].copy()
+            codigos_display.columns = ["📌 CÓDIGO", "📦 PRODUCTO", "🔖 UNIDAD"]
+            
+            # Mostrar tabla
+            st.dataframe(codigos_display, use_container_width=True, hide_index=True)
+            
+            # Opción de descargar como CSV
+            csv_codigos = codigos_display.to_csv(index=False)
+            st.download_button(
+                "📥 Descargar lista de códigos (CSV)",
+                data=csv_codigos,
+                file_name=f"codigos_productos_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
     st.markdown("---")
 
