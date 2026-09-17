@@ -161,7 +161,7 @@ def leer_ventas():
         return pd.DataFrame()
 
 def guardar_catalogo(df):
-    """Guarda el catálogo con validaciones y backup automático"""
+    """Guarda el catálogo con validaciones"""
     # Validación: nunca guardar vacío
     if df.empty or len(df) == 0:
         st.error("❌ ERROR: Intentaste guardar un catálogo vacío. Se cancela para proteger tus datos.")
@@ -169,12 +169,6 @@ def guardar_catalogo(df):
     
     try:
         ws = get_catalog_ws()
-        
-        # Backup en session state (recuperación de 1 click)
-        if "backup_catalogo" not in st.session_state:
-            st.session_state.backup_catalogo = leer_catalogo().copy()
-        else:
-            st.session_state.backup_catalogo = leer_catalogo().copy()
         
         # Preparar datos: números como números, strings como strings
         datos_guardar = []
@@ -372,14 +366,7 @@ with tab1:
 with tab2:
     df = leer_catalogo()
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("📊 ESTADO DEL INVENTARIO")
-    with col2:
-        if st.button("🔄 ACTUALIZAR"):
-            st.cache_data.clear()
-            st.rerun()
-    
+    st.subheader("📊 ESTADO DEL INVENTARIO")
     if df.empty:
         st.info("No hay productos registrados.")
     else:
@@ -413,15 +400,6 @@ with tab3:
     st.subheader("📦 GESTIÓN DE PRODUCTOS")
     df_prod = leer_catalogo()
 
-    # Botón de recuperación de backup (si existe)
-    if "backup_catalogo" in st.session_state and not st.session_state.backup_catalogo.empty:
-        col_backup1, col_backup2 = st.columns([3, 1])
-        with col_backup2:
-            if st.button("♻️ Recuperar backup", help="Restaura el último backup automático"):
-                guardar_catalogo(st.session_state.backup_catalogo)
-                st.success("✅ Backup restaurado")
-                st.rerun()
-
     st.markdown("---")
 
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
@@ -439,36 +417,32 @@ with tab3:
                 n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
                 n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
 
-            confirmar = st.checkbox("✅ Confirmo que los datos son correctos", value=False, key="confirm_add_prod")
             enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
 
             if enviado:
-                if not confirmar:
-                    st.error("❌ Debes confirmar que los datos son correctos")
+                n_codigo_limpio = n_codigo.strip()
+                
+                # Generar código EAN-13 si está vacío
+                if not n_codigo_limpio:
+                    n_codigo_limpio = generar_codigo_ean13()
+                
+                if not n_producto.strip():
+                    st.error("❌ El nombre del producto es obligatorio")
+                elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
+                    st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
                 else:
-                    n_codigo_limpio = n_codigo.strip()
+                    nueva_fila = pd.DataFrame([{
+                        "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
+                        "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
+                    }])
+                    df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
                     
-                    # Generar código EAN-13 si está vacío
-                    if not n_codigo_limpio:
-                        n_codigo_limpio = generar_codigo_ean13()
-                    
-                    if not n_producto.strip():
-                        st.error("❌ El nombre del producto es obligatorio")
-                    elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
-                        st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
+                    if guardar_catalogo(df_actualizado):
+                        st.success(f"✅ {n_producto} agregado")
+                        st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
+                        st.rerun()
                     else:
-                        nueva_fila = pd.DataFrame([{
-                            "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
-                            "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
-                        }])
-                        df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
-                        
-                        if guardar_catalogo(df_actualizado):
-                            st.success(f"✅ {n_producto} agregado")
-                            st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
-                            st.rerun()
-                        else:
-                            st.error("❌ Hubo un error guardando. Intenta de nuevo.")
+                        st.error("❌ Hubo un error guardando. Intenta de nuevo.")
 
     # Mostrar códigos generados para anotar en libreta
     if not df_prod.empty:
