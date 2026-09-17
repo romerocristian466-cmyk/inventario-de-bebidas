@@ -161,9 +161,49 @@ def leer_ventas():
         return pd.DataFrame()
 
 def guardar_catalogo(df):
-    ws = get_catalog_ws()
-    ws.clear()
-    ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
+    """Guarda el catálogo con validaciones y backup automático"""
+    # Validación: nunca guardar vacío
+    if df.empty or len(df) == 0:
+        st.error("❌ ERROR: Intentaste guardar un catálogo vacío. Se cancela para proteger tus datos.")
+        return False
+    
+    try:
+        ws = get_catalog_ws()
+        
+        # Backup en session state (recuperación de 1 click)
+        if "backup_catalogo" not in st.session_state:
+            st.session_state.backup_catalogo = leer_catalogo().copy()
+        else:
+            st.session_state.backup_catalogo = leer_catalogo().copy()
+        
+        # Preparar datos: números como números, strings como strings
+        datos_guardar = []
+        for _, row in df.iterrows():
+            fila = []
+            for col in df.columns:
+                val = row[col]
+                # Columnas numéricas: convertir a float
+                if col in ["Stock", "Costo", "Precio_Venta"]:
+                    try:
+                        fila.append(float(val))
+                    except:
+                        fila.append(0.0)
+                else:
+                    # Columnas de texto: convertir a string
+                    fila.append(str(val))
+            datos_guardar.append(fila)
+        
+        # Guardar con encabezados
+        ws.clear()
+        ws.update([df.columns.tolist()] + datos_guardar)
+        
+        # Limpiar cache para que lea datos nuevos
+        st.cache_data.clear()
+        return True
+    
+    except Exception as e:
+        st.error(f"❌ Error guardando: {str(e)}")
+        return False
 
 @st.cache_data(ttl=30)
 def leer_fiados():
@@ -373,6 +413,17 @@ with tab3:
     st.subheader("📦 GESTIÓN DE PRODUCTOS")
     df_prod = leer_catalogo()
 
+    # Botón de recuperación de backup (si existe)
+    if "backup_catalogo" in st.session_state and not st.session_state.backup_catalogo.empty:
+        col_backup1, col_backup2 = st.columns([3, 1])
+        with col_backup2:
+            if st.button("♻️ Recuperar backup", help="Restaura el último backup automático"):
+                guardar_catalogo(st.session_state.backup_catalogo)
+                st.success("✅ Backup restaurado")
+                st.rerun()
+
+    st.markdown("---")
+
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
         st.write("**Tip:** Deja el código vacío para generar uno automático (EAN-13 válido, escaneable)")
         
@@ -388,35 +439,43 @@ with tab3:
                 n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
                 n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
 
-            enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                confirmar = st.checkbox("✅ Confirmo que los datos son correctos", value=False, key="confirm_add_prod")
+            with col_btn2:
+                enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary", disabled=not confirmar)
 
             if enviado:
-                n_codigo_limpio = n_codigo.strip()
-                
-                # Generar código EAN-13 si está vacío
-                if not n_codigo_limpio:
-                    n_codigo_limpio = generar_codigo_ean13()
-                
-                if not n_producto.strip():
-                    st.error("❌ El nombre del producto es obligatorio")
-                elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
-                    st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
+                if not confirmar:
+                    st.error("❌ Debes confirmar que los datos son correctos")
                 else:
-                    nueva_fila = pd.DataFrame([{
-                        "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
-                        "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
-                    }])
-                    df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
-                    guardar_catalogo(df_actualizado)
-                    st.cache_data.clear()
-                    st.success(f"✅ {n_producto} agregado")
-                    st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
-                    st.rerun()
-
-    st.markdown("---")
+                    n_codigo_limpio = n_codigo.strip()
+                    
+                    # Generar código EAN-13 si está vacío
+                    if not n_codigo_limpio:
+                        n_codigo_limpio = generar_codigo_ean13()
+                    
+                    if not n_producto.strip():
+                        st.error("❌ El nombre del producto es obligatorio")
+                    elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
+                        st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
+                    else:
+                        nueva_fila = pd.DataFrame([{
+                            "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
+                            "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
+                        }])
+                        df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
+                        
+                        if guardar_catalogo(df_actualizado):
+                            st.success(f"✅ {n_producto} agregado")
+                            st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
+                            st.rerun()
+                        else:
+                            st.error("❌ Hubo un error guardando. Intenta de nuevo.")
 
     # Mostrar códigos generados para anotar en libreta
     if not df_prod.empty:
+        st.markdown("---")
         with st.expander("📋 VER TODOS LOS CÓDIGOS (para anotar en libreta)"):
             st.write("**Copia estos códigos a tu libreta — la vendedora los escaneará con la pistola:**")
             st.markdown("---")
