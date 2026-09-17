@@ -158,10 +158,22 @@ def leer_catalogo():
         return df
     return pd.DataFrame()
 
-def guardar_catalogo(df):
-    ws = get_catalog_ws()
-    ws.clear()
-    ws.update([df.columns.tolist()] + df.astype(str).values.tolist())
+def actualizar_stock_producto(codigo, nuevo_stock):
+    """Actualiza SOLO el stock de un producto. 100% seguro, no toca otras filas."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo):
+                # Solo actualiza la celda de Stock (columna C)
+                ws.update_cell(idx, 3, float(nuevo_stock))
+                st.cache_data.clear()
+                return True
+        return False
+    except Exception as e:
+        st.error(f"❌ Error actualizando stock: {str(e)}")
+        return False
 
 def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente=""):
     ws_ventas = get_ventas_ws()
@@ -245,8 +257,8 @@ def deshacer_ultima_venta():
     for item in st.session_state.ultima_venta_carrito:
         idx = df_actual[df_actual["Codigo"] == item["codigo"]].index
         if len(idx):
-            df_actual.at[idx[0], "Stock"] = df_actual.at[idx[0], "Stock"] + item["cantidad"]
-    guardar_catalogo(df_actual)
+            nuevo_stock = df_actual.at[idx[0], "Stock"] + item["cantidad"]
+            actualizar_stock_producto(item["codigo"], nuevo_stock)
 
     try:
         ws_v = get_ventas_ws()
@@ -457,14 +469,13 @@ else:
                 if stock_ok:
                     for item in st.session_state.carrito:
                         fila_idx = df[df["Codigo"] == item["codigo"]].index[0]
-                        df.at[fila_idx, "Stock"] = df.at[fila_idx, "Stock"] - item["cantidad"]
+                        nuevo_stock = df.at[fila_idx, "Stock"] - item["cantidad"]
+                        actualizar_stock_producto(item["codigo"], nuevo_stock)
                         registrar_venta(
                             item["codigo"], item["producto"], item["cantidad"],
                             item["unidad"], item["precio"], item["costo"],
                             metodo_pago=metodo_pago, cliente=cliente
                         )
-
-                    guardar_catalogo(df)
 
                     if metodo_pago == "Fiado":
                         detalle = ", ".join(f"{it['producto']} x{it['cantidad']:g}" for it in st.session_state.carrito)

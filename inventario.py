@@ -160,43 +160,76 @@ def leer_ventas():
     except:
         return pd.DataFrame()
 
-def guardar_catalogo(df):
-    """Guarda el catálogo con validaciones"""
-    # Validación: nunca guardar vacío
-    if df.empty or len(df) == 0:
-        st.error("❌ ERROR: Intentaste guardar un catálogo vacío. Se cancela para proteger tus datos.")
-        return False
-    
+def agregar_producto(codigo, producto, stock, unidad, costo, precio):
+    """Agrega UNA fila nueva sin tocar las demás. 100% seguro."""
     try:
         ws = get_catalog_ws()
         
-        # Preparar datos: números como números, strings como strings
-        datos_guardar = []
-        for _, row in df.iterrows():
-            fila = []
-            for col in df.columns:
-                val = row[col]
-                # Columnas numéricas: convertir a float
-                if col in ["Stock", "Costo", "Precio_Venta"]:
-                    try:
-                        fila.append(float(val))
-                    except:
-                        fila.append(0.0)
-                else:
-                    # Columnas de texto: convertir a string
-                    fila.append(str(val))
-            datos_guardar.append(fila)
-        
-        # Guardar con encabezados
-        ws.clear()
-        ws.update([df.columns.tolist()] + datos_guardar)
+        # Solo agrega una fila nueva al final
+        nueva_fila = [
+            str(codigo),
+            str(producto),
+            float(stock) if not pd.isna(float(stock)) else 0.0,
+            str(unidad),
+            float(costo) if not pd.isna(float(costo)) else 0.0,
+            float(precio) if not pd.isna(float(precio)) else 0.0
+        ]
+        ws.append_row(nueva_fila)
         
         # Limpiar cache para que lea datos nuevos
         st.cache_data.clear()
         return True
-    
     except Exception as e:
-        st.error(f"❌ Error guardando: {str(e)}")
+        st.error(f"❌ Error agregando producto: {str(e)}")
+        return False
+
+
+def actualizar_producto(codigo_original, producto, stock, unidad, costo, precio):
+    """Actualiza UNA fila específica sin tocar las demás. 100% seguro."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        
+        # Buscar el índice de la fila (empieza en 2 porque fila 1 son encabezados)
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo_original):
+                # Actualizar cada celda de esa fila
+                fila_actualizada = [
+                    str(codigo_original),
+                    str(producto),
+                    float(stock) if not pd.isna(float(stock)) else 0.0,
+                    str(unidad),
+                    float(costo) if not pd.isna(float(costo)) else 0.0,
+                    float(precio) if not pd.isna(float(precio)) else 0.0
+                ]
+                # Actualizar el rango de esa fila específica (A a F)
+                ws.update(f"A{idx}:F{idx}", [fila_actualizada])
+                st.cache_data.clear()
+                return True
+        
+        st.error(f"❌ No se encontró el producto con código {codigo_original}")
+        return False
+    except Exception as e:
+        st.error(f"❌ Error actualizando: {str(e)}")
+        return False
+
+
+def eliminar_producto(codigo):
+    """Elimina UNA fila específica. 100% seguro."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo):
+                ws.delete_rows(idx)
+                st.cache_data.clear()
+                return True
+        
+        st.error(f"❌ No se encontró el producto con código {codigo}")
+        return False
+    except Exception as e:
+        st.error(f"❌ Error eliminando: {str(e)}")
         return False
 
 @st.cache_data(ttl=30)
@@ -348,8 +381,16 @@ with tab1:
                 ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
                 nuevo_stock = stock_actual + ajuste
                 
-                df.loc[df["Producto"] == producto_seleccionado, "Stock"] = nuevo_stock
-                guardar_catalogo(df)
+                # Actualizar solo esa fila (no reescribir todo)
+                fila_producto = df[df["Producto"] == producto_seleccionado].iloc[0]
+                actualizar_producto(
+                    fila_producto["Codigo"],
+                    fila_producto["Producto"],
+                    nuevo_stock,
+                    fila_producto.get("Unidad", "Unidades"),
+                    float(fila_producto.get("Costo", 0)),
+                    float(fila_producto.get("Precio_Venta", 0))
+                )
                 
                 # Registrar venta en historial
                 if "VENTA" in tipo_operacion:
@@ -431,13 +472,7 @@ with tab3:
                 elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
                     st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
                 else:
-                    nueva_fila = pd.DataFrame([{
-                        "Codigo": n_codigo_limpio, "Producto": n_producto.strip(), "Stock": n_stock,
-                        "Unidad": n_unidad, "Costo": n_costo, "Precio_Venta": n_precio
-                    }])
-                    df_actualizado = pd.concat([df_prod, nueva_fila], ignore_index=True)
-                    
-                    if guardar_catalogo(df_actualizado):
+                    if agregar_producto(n_codigo_limpio, n_producto.strip(), n_stock, n_unidad, n_costo, n_precio):
                         st.success(f"✅ {n_producto} agregado")
                         st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
                         st.rerun()
@@ -492,25 +527,19 @@ with tab3:
                                            step=0.01, format="%.2f", key="e_precio")
 
             if st.button("💾 GUARDAR CAMBIOS", use_container_width=True, type="primary", key="guardar_edicion"):
-                df_prod.at[idx, "Producto"] = e_producto.strip()
-                df_prod.at[idx, "Stock"] = e_stock
-                df_prod.at[idx, "Unidad"] = e_unidad
-                df_prod.at[idx, "Costo"] = e_costo
-                df_prod.at[idx, "Precio_Venta"] = e_precio
-                guardar_catalogo(df_prod)
-                st.cache_data.clear()
-                st.success(f"✅ {e_producto} actualizado")
-                st.rerun()
+                codigo_original = fila["Codigo"]
+                if actualizar_producto(codigo_original, e_producto.strip(), e_stock, e_unidad, e_costo, e_precio):
+                    st.success(f"✅ {e_producto} actualizado")
+                    st.rerun()
 
         with st.expander("🗑️ ELIMINAR PRODUCTO"):
             producto_eliminar = st.selectbox("Selecciona producto a eliminar:", df_prod["Producto"].tolist(), key="eliminar_select")
             confirmar = st.checkbox(f"Sí, quiero eliminar '{producto_eliminar}' permanentemente")
             if st.button("🗑️ ELIMINAR PRODUCTO", use_container_width=True, disabled=not confirmar, key="btn_eliminar"):
-                df_actualizado = df_prod[df_prod["Producto"] != producto_eliminar]
-                guardar_catalogo(df_actualizado)
-                st.cache_data.clear()
-                st.success(f"✅ {producto_eliminar} eliminado del catálogo")
-                st.rerun()
+                codigo_eliminar = df_prod[df_prod["Producto"] == producto_eliminar]["Codigo"].values[0]
+                if eliminar_producto(codigo_eliminar):
+                    st.success(f"✅ {producto_eliminar} eliminado del catálogo")
+                    st.rerun()
 
 # ============================================================
 #  TAB 4: REPORTES
