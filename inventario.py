@@ -439,11 +439,8 @@ with tab3:
                 n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
                 n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
 
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                confirmar = st.checkbox("✅ Confirmo que los datos son correctos", value=False, key="confirm_add_prod")
-            with col_btn2:
-                enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary", disabled=not confirmar)
+            confirmar = st.checkbox("✅ Confirmo que los datos son correctos", value=False, key="confirm_add_prod")
+            enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
 
             if enviado:
                 if not confirmar:
