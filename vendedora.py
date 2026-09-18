@@ -1,5 +1,5 @@
 """
-SODA PRO - APP VENDEDORA v4
+SODA PRO - APP VENDEDORA v4.1
 Carrito + Ticket digital (WhatsApp) + Métodos de pago + Cambio + Modo Fiado
 """
 import streamlit as st
@@ -10,7 +10,7 @@ from datetime import datetime
 import urllib.parse
 
 # ============================================================
-#  CONFIGURACIÓN
+# CONFIGURACIÓN
 # ============================================================
 st.set_page_config(
     page_title="Punto de Venta",
@@ -19,99 +19,82 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ============================================================
 # CSS PREMIUM
+# ============================================================
 st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-        background-size: 400% 400%;
-        animation: gradientBG 15s ease infinite;
-    }
-    @keyframes gradientBG {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    .stButton>button, .stLinkButton>a {
-        width: 100%;
-        border-radius: 20px;
-        height: 4em;
-        background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
-        color: white;
-        font-weight: bold;
-        font-size: 20px;
-        border: none;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .stButton>button:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
-    [data-testid="metric-container"] {
-        background: rgba(255,255,255,0.98);
-        border-radius: 20px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-        border: 3px solid rgba(255,255,255,0.5);
-    }
-    [data-testid="metric-container"] > div { font-size: 24px !important; font-weight: bold; }
-    [data-testid="metric-container"] label { font-size: 16px !important; font-weight: bold; color: #333; }
-    #MainMenu, footer, header { visibility: hidden; }
-    h1 { color: white; text-align: center; text-shadow: 0 4px 15px rgba(0,0,0,0.3);
-         font-size: 42px !important; font-weight: 900; letter-spacing: 2px; }
-    h2, h3 { color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-    .stTextInput input {
-        font-size: 22px !important; height: 65px !important; border-radius: 20px !important;
-        text-align: center; border: 3px solid rgba(255,255,255,0.5) !important;
-        background: rgba(255,255,255,0.95) !important; box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-        font-weight: bold;
-    }
-    .stNumberInput input { font-size: 22px !important; height: 55px !important; text-align: center; border-radius: 15px !important; }
-    .total-grande {
-        background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-        color: white; padding: 25px; border-radius: 20px; text-align: center;
-        font-size: 32px; font-weight: 900; box-shadow: 0 8px 25px rgba(0,0,0,0.3); margin: 20px 0;
-    }
-    .ticket-box {
-        background: rgba(255,255,255,0.97);
-        border-radius: 15px;
-        padding: 20px;
-        font-family: 'Courier New', monospace;
-        font-size: 15px;
-        white-space: pre-wrap;
-        color: #222;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-        margin: 15px 0;
-    }
-    .stAlert { border-radius: 15px !important; border: none !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
-    .stSuccess { background: linear-gradient(90deg, #11998e, #38ef7d) !important; color: white !important; }
-    .stError { background: linear-gradient(90deg, #ff416c, #ff4b2b) !important; color: white !important; }
-    .stInfo { background: linear-gradient(90deg, #667eea, #764ba2) !important; color: white !important; }
-    .stRadio { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    </style>
+<style>
+.stApp {
+    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+}
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.stButton > button, .stLinkButton > a {
+    width: 100%; border-radius: 20px; height: 4em;
+    background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
+    color: white; font-weight: bold; font-size: 20px; border: none;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3); transition: all 0.3s ease;
+    display: flex; align-items: center; justify-content: center;
+}
+.stButton > button:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+[data-testid="metric-container"] {
+    background: rgba(255,255,255,0.98); border-radius: 20px; padding: 20px;
+    text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.2); border: 3px solid rgba(255,255,255,0.5);
+}
+[data-testid="metric-container"] > div { font-size: 24px !important; font-weight: bold; }
+[data-testid="metric-container"] label { font-size: 16px !important; font-weight: bold; color: #333; }
+#MainMenu, footer, header { visibility: hidden; }
+h1 { color: white; text-align: center; text-shadow: 0 4px 15px rgba(0,0,0,0.3);
+     font-size: 42px !important; font-weight: 900; letter-spacing: 2px; }
+h2, h3 { color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+.stTextInput input {
+    font-size: 22px !important; height: 65px !important; border-radius: 20px !important;
+    text-align: center; border: 3px solid rgba(255,255,255,0.5) !important;
+    background: rgba(255,255,255,0.95) !important; box-shadow: 0 6px 20px rgba(0,0,0,0.15); font-weight: bold;
+}
+.stNumberInput input { font-size: 22px !important; height: 55px !important; text-align: center; border-radius: 15px !important; }
+.total-grande {
+    background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+    color: white; padding: 25px; border-radius: 20px; text-align: center;
+    font-size: 32px; font-weight: 900; box-shadow: 0 8px 25px rgba(0,0,0,0.3); margin: 20px 0;
+}
+.ticket-box {
+    background: rgba(255,255,255,0.97); border-radius: 15px; padding: 20px;
+    font-family: 'Courier New', monospace; font-size: 15px; white-space: pre-wrap;
+    color: #222; box-shadow: 0 6px 20px rgba(0,0,0,0.2); margin: 15px 0;
+}
+.stAlert { border-radius: 15px !important; border: none !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+.stSuccess { background: linear-gradient(90deg, #11998e, #38ef7d) !important; color: white !important; }
+.stError { background: linear-gradient(90deg, #ff416c, #ff4b2b) !important; color: white !important; }
+.stInfo { background: linear-gradient(90deg, #667eea, #764ba2) !important; color: white !important; }
+.stRadio { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+</style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-#  GOOGLE SHEETS
+# GOOGLE SHEETS
 # ============================================================
 SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
-
 try:
     CREDENTIALS = dict(st.secrets["google_credentials"])
 except Exception:
-    st.error("⚠️ Faltan las credenciales de Google. Pídele al administrador que configure los 'Secrets' de esta app.")
+    st.error("⚠️ Faltan las credenciales de Google. Pídele al administrador que configure los 'Secrets'.")
     st.stop()
 
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad",
+HEADERS_CATALOGO = ["Codigo", "Producto", "Stock", "Unidad de Venta", "Costo", "Precio_Venta"]
+HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad de Venta", 
                   "Precio_Unit", "Costo_Unit", "Total", "Ganancia", "Metodo_Pago", "Cliente"]
 HEADERS_FIADOS = ["Fecha", "Hora", "Cliente", "Detalle", "Total", "Estado"]
 
 # ============================================================
-#  FUNCIONES
+# FUNCIONES
 # ============================================================
 def get_spreadsheet():
     creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
@@ -142,31 +125,38 @@ def get_fiados_ws():
         ws.append_row(HEADERS_FIADOS)
         return ws
 
+def leer_ws_seguro(ws, headers_esperados):
+    """Lee una hoja ignorando columnas duplicadas o basura extra"""
+    data = ws.get_all_values()
+    if not data or len(data) < 2:
+        return pd.DataFrame(columns=headers_esperados)
+    
+    filas = []
+    num_cols = len(headers_esperados)
+    for fila in data[1:]:
+        fila_limpia = (fila + [""] * num_cols)[:num_cols]
+        if any(str(c).strip() for c in fila_limpia):
+            filas.append(fila_limpia)
+            
+    return pd.DataFrame(filas, columns=headers_esperados)
+
 @st.cache_data(ttl=30)
 def leer_catalogo():
     ws = get_catalog_ws()
-    registros = ws.get_all_records()
-    if registros:
-        df = pd.DataFrame(registros)
-        for col in ["Stock", "Costo", "Precio_Venta"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-        if "Codigo" in df.columns:
-            df["Codigo"] = df["Codigo"].astype(str)
-        if "Unidad" not in df.columns:
-            df["Unidad"] = "Unidades"
-        return df
-    return pd.DataFrame()
+    df = leer_ws_seguro(ws, HEADERS_CATALOGO)
+    
+    for col in ["Stock", "Costo", "Precio_Venta"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["Codigo"] = df["Codigo"].astype(str)
+    df["Unidad de Venta"] = df["Unidad de Venta"].replace("", "Unidades").fillna("Unidades")
+    return df
 
 def actualizar_stock_producto(codigo, nuevo_stock):
-    """Actualiza SOLO el stock de un producto. 100% seguro, no toca otras filas."""
     try:
         ws = get_catalog_ws()
-        registros = ws.get_all_records()
-        
-        for idx, reg in enumerate(registros, start=2):
-            if str(reg.get("Codigo", "")) == str(codigo):
-                # Solo actualiza la celda de Stock (columna C)
+        data = ws.get_all_values()
+        for idx, fila in enumerate(data[1:], start=2):
+            if len(fila) > 0 and str(fila[0]).strip() == str(codigo):
                 ws.update_cell(idx, 3, float(nuevo_stock))
                 st.cache_data.clear()
                 return True
@@ -175,14 +165,14 @@ def actualizar_stock_producto(codigo, nuevo_stock):
         st.error(f"❌ Error actualizando stock: {str(e)}")
         return False
 
-def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente=""):
+def registrar_venta(codigo, producto, cantidad, unidad_venta, precio, costo, metodo_pago="Efectivo", cliente=""):
     ws_ventas = get_ventas_ws()
     ahora = datetime.now()
     total = cantidad * precio
     ganancia = cantidad * (precio - costo)
     ws_ventas.append_row([
         ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"),
-        str(codigo), producto, cantidad, unidad,
+        str(codigo), producto, cantidad, unidad_venta,
         precio, costo, total, ganancia, metodo_pago, cliente
     ])
 
@@ -216,7 +206,7 @@ def generar_ticket(carrito, total, metodo_pago, monto_recibido=None, cambio=None
     return "\n".join(lineas)
 
 # ============================================================
-#  SESSION STATE
+# SESSION STATE
 # ============================================================
 defaults = {
     "carrito": [], "ventas_hoy": 0, "total_hoy": 0.0,
@@ -230,36 +220,29 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 def agregar_al_carrito(df, codigo):
-    """Busca el código en el catálogo y lo agrega (o suma 1) al carrito.
-       Devuelve True si lo encontró, False si no existe."""
     if codigo not in df["Codigo"].values:
         return False
-
     fila = df[df["Codigo"] == codigo].iloc[0]
-
     for item in st.session_state.carrito:
         if item["codigo"] == codigo:
             item["cantidad"] += 1
             item["subtotal"] = item["cantidad"] * item["precio"]
             return True
-
     st.session_state.carrito.append({
         "codigo": codigo, "producto": fila["Producto"], "cantidad": 1,
-        "unidad": fila.get("Unidad", "Unidades"),
+        "unidad_venta": fila.get("Unidad de Venta", "Unidades"),
         "precio": float(fila.get("Precio_Venta", 0)), "costo": float(fila.get("Costo", 0)),
         "subtotal": float(fila.get("Precio_Venta", 0)), "stock_disponible": float(fila["Stock"])
     })
     return True
 
 def deshacer_ultima_venta():
-    """Repone stock y borra los registros de la última venta confirmada"""
     df_actual = leer_catalogo()
     for item in st.session_state.ultima_venta_carrito:
         idx = df_actual[df_actual["Codigo"] == item["codigo"]].index
         if len(idx):
             nuevo_stock = df_actual.at[idx[0], "Stock"] + item["cantidad"]
             actualizar_stock_producto(item["codigo"], nuevo_stock)
-
     try:
         ws_v = get_ventas_ws()
         total_filas = len(ws_v.get_all_values())
@@ -268,7 +251,7 @@ def deshacer_ultima_venta():
             ws_v.delete_rows(total_filas - n + 1, total_filas)
     except Exception:
         pass
-
+    
     if st.session_state.ultima_venta_metodo == "Fiado":
         try:
             ws_f = get_fiados_ws()
@@ -277,7 +260,7 @@ def deshacer_ultima_venta():
                 ws_f.delete_rows(total_f)
         except Exception:
             pass
-
+            
     st.session_state.ventas_hoy = max(0, st.session_state.ventas_hoy - 1)
     st.session_state.total_hoy = max(0.0, st.session_state.total_hoy - st.session_state.ultima_venta_total)
     st.session_state.ticket_texto = None
@@ -288,7 +271,7 @@ def deshacer_ultima_venta():
     st.cache_data.clear()
 
 # ============================================================
-#  INTERFAZ
+# INTERFAZ
 # ============================================================
 st.title("🛒 PUNTO DE VENTA")
 
@@ -296,12 +279,12 @@ if st.session_state.flash:
     st.info(st.session_state.flash)
     st.session_state.flash = None
 
-# Ticket de la última venta (persiste hasta la próxima acción)
 if st.session_state.ticket_texto:
     st.success("### 🎉 ¡VENTA REGISTRADA!")
     st.markdown(f'<div class="ticket-box">{st.session_state.ticket_texto}</div>', unsafe_allow_html=True)
     if st.session_state.ticket_link:
         st.link_button("📲 Enviar por WhatsApp", st.session_state.ticket_link, use_container_width=True)
+    
     col1, col2 = st.columns(2)
     with col1:
         if st.button("↩️ CORREGIR (anular)", use_container_width=True):
@@ -314,7 +297,6 @@ if st.session_state.ticket_texto:
             st.rerun()
     st.markdown("---")
 
-# Contadores del día + botón actualizar
 col1, col2, col3 = st.columns([2, 2, 1])
 with col1:
     st.metric("🛒 Ventas HOY", st.session_state.ventas_hoy)
@@ -327,32 +309,23 @@ with col3:
         st.rerun()
 
 st.markdown("---")
-
 df = leer_catalogo()
 
 if df.empty:
     st.error("❌ No hay productos. Contacta al administrador.")
 else:
-    # ============================================================
-    #  ESCÁNER (key dinámica: se limpia solo tras cada lectura)
-    # ============================================================
     st.markdown("### 📷 ESCANEA EL PRODUCTO")
-
     codigo_escaneado = st.text_input(
-        "",
-        placeholder="Apunta el escáner o escribe el código...",
-        key=f"scanner_input_{st.session_state.input_counter}",
-        label_visibility="collapsed"
+        "", placeholder="Apunta el escáner o escribe el código...",
+        key=f"scanner_input_{st.session_state.input_counter}", label_visibility="collapsed"
     )
-
+    
     if codigo_escaneado:
         codigo_escaneado = codigo_escaneado.strip()
         st.session_state.ticket_texto = None
         st.session_state.ticket_link = None
-
         if not agregar_al_carrito(df, codigo_escaneado):
             st.error(f"❌ Código {codigo_escaneado} NO existe")
-
         st.session_state.input_counter += 1
         st.rerun()
 
@@ -360,8 +333,7 @@ else:
         opciones_busqueda = ["--- Selecciona un producto ---"] + sorted(df["Producto"].dropna().unique().tolist())
         seleccion = st.selectbox(
             "Producto:", opciones_busqueda,
-            key=f"buscar_{st.session_state.busqueda_counter}",
-            label_visibility="collapsed"
+            key=f"buscar_{st.session_state.busqueda_counter}", label_visibility="collapsed"
         )
         if seleccion != "--- Selecciona un producto ---":
             codigo_sel = str(df.loc[df["Producto"] == seleccion, "Codigo"].values[0])
@@ -373,20 +345,16 @@ else:
 
     st.markdown("---")
 
-    # ============================================================
-    #  CARRITO
-    # ============================================================
     if st.session_state.carrito:
         st.markdown("### 🛒 CARRITO DE COMPRAS")
-
         total_carrito = 0
         items_a_eliminar = []
-
+        
         for i, item in enumerate(st.session_state.carrito):
             col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
             with col1:
                 st.markdown(f"**{item['producto']}**")
-                st.caption(f"${item['precio']:.2f} × {item['cantidad']:g} {item['unidad']}")
+                st.caption(f"${item['precio']:.2f} × {item['cantidad']:g} {item['unidad_venta']}")
             with col2:
                 nueva_cantidad = st.number_input(
                     "Cant:", min_value=0.01, value=float(item['cantidad']),
@@ -402,16 +370,13 @@ else:
                     items_a_eliminar.append(i)
             total_carrito += item['subtotal']
             st.markdown("---")
-
+            
         for i in sorted(items_a_eliminar, reverse=True):
             st.session_state.carrito.pop(i)
             st.rerun()
-
+            
         st.markdown(f'<div class="total-grande">💰 TOTAL A COBRAR<br>${total_carrito:.2f}</div>', unsafe_allow_html=True)
-
-        # ============================================================
-        #  MÉTODO DE PAGO
-        # ============================================================
+        
         st.markdown("### 💳 MÉTODO DE PAGO")
         metodo_opciones = {"💵 Efectivo": "Efectivo", "🏦 Transferencia": "Transferencia", "📝 Fiado": "Fiado"}
         metodo_pago_raw = st.radio(
@@ -419,10 +384,10 @@ else:
             horizontal=True, key=f"metodo_{st.session_state.venta_counter}", label_visibility="collapsed"
         )
         metodo_pago = metodo_opciones[metodo_pago_raw]
-
+        
         monto_recibido, cambio, cliente = None, None, ""
         puede_cobrar = True
-
+        
         if metodo_pago == "Efectivo":
             monto_recibido = st.number_input(
                 "💵 Monto recibido:", min_value=0.0, value=float(total_carrito),
@@ -434,27 +399,20 @@ else:
                 puede_cobrar = False
             else:
                 st.metric("💰 Cambio a devolver", f"${cambio:.2f}")
-
         elif metodo_pago == "Fiado":
-            cliente = st.text_input(
-                "👤 Nombre del cliente:", key=f"cliente_{st.session_state.venta_counter}"
-            )
+            cliente = st.text_input("👤 Nombre del cliente:", key=f"cliente_{st.session_state.venta_counter}")
             if not cliente.strip():
                 st.warning("⚠️ Escribe el nombre del cliente para dejarlo fiado")
                 puede_cobrar = False
             else:
                 st.info(f"📝 Se registrará como deuda pendiente de **{cliente}**")
-
-        # ============================================================
-        #  BOTONES
-        # ============================================================
+                
         col1, col2 = st.columns(2)
         with col1:
             if st.button("❌ CANCELAR", use_container_width=True):
                 st.session_state.carrito = []
                 st.session_state.venta_counter += 1
                 st.rerun()
-
         with col2:
             if st.button("✅ COBRAR", type="primary", use_container_width=True, disabled=not puede_cobrar):
                 stock_ok = True
@@ -465,7 +423,7 @@ else:
                         st.error(f"❌ Stock insuficiente para {item['producto']}. Solo hay {stock_real:g}")
                         stock_ok = False
                         break
-
+                        
                 if stock_ok:
                     for item in st.session_state.carrito:
                         fila_idx = df[df["Codigo"] == item["codigo"]].index[0]
@@ -473,30 +431,27 @@ else:
                         actualizar_stock_producto(item["codigo"], nuevo_stock)
                         registrar_venta(
                             item["codigo"], item["producto"], item["cantidad"],
-                            item["unidad"], item["precio"], item["costo"],
+                            item["unidad_venta"], item["precio"], item["costo"],
                             metodo_pago=metodo_pago, cliente=cliente
                         )
-
+                    
                     if metodo_pago == "Fiado":
                         detalle = ", ".join(f"{it['producto']} x{it['cantidad']:g}" for it in st.session_state.carrito)
                         registrar_fiado(cliente, detalle, total_carrito)
-
+                        
                     ticket = generar_ticket(
                         st.session_state.carrito, total_carrito, metodo_pago,
                         monto_recibido=monto_recibido, cambio=cambio, cliente=cliente
                     )
                     st.session_state.ticket_texto = ticket
                     st.session_state.ticket_link = "https://api.whatsapp.com/send?text=" + urllib.parse.quote(ticket)
-
                     st.session_state.ultima_venta_carrito = list(st.session_state.carrito)
                     st.session_state.ultima_venta_metodo = metodo_pago
                     st.session_state.ultima_venta_total = total_carrito
-
                     st.session_state.ventas_hoy += 1
                     st.session_state.total_hoy += total_carrito
                     st.session_state.carrito = []
                     st.session_state.venta_counter += 1
-
                     st.cache_data.clear()
                     st.balloons()
                     st.rerun()
