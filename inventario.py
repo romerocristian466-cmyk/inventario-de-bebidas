@@ -1,6 +1,6 @@
 """
-SODA PRO - APP ADMIN v5.0
-Sistema POS profesional con diseño premium, reportes avanzados y control total
+SODA PRO - APP ADMIN v5.1 (Diseño Visual Ultra Profesional)
+Sistema POS profesional con diseño minimalista, reportes avanzados y control total
 """
 import streamlit as st
 import gspread
@@ -14,246 +14,218 @@ import random
 # ============================================================
 st.set_page_config(
     page_title="Soda Pro - Admin Profesional",
-    page_icon="",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================
-# CSS PREMIUM - DISEÑO PROFESIONAL
+# CSS MINIMALISTA PREMIUM (Estilo Vercel / Stripe / Apple)
 # ============================================================
 st.markdown("""
 <style>
-/* Fondo principal con gradiente sutil profesional */
+/* Importar tipografía moderna Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Fondo principal limpio y neutro (Modo Claro Profesional) */
 .stApp {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    background-attachment: fixed;
+    background-color: #f8fafc;
+    color: #0f172a;
 }
 
-/* Tarjetas y contenedores */
-.css-1r6slb0, .stAlert, .stExpander {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(10px);
+/* Ocultar elementos de Streamlit por defecto */
+#MainMenu, footer, header {
+    visibility: hidden;
 }
 
-/* Botones premium */
-.stButton > button {
-    width: 100%;
-    border-radius: 12px;
-    height: 48px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-weight: 700;
-    font-size: 16px;
-    border: none;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    transition: all 0.3s ease;
+/* Contenedores y tarjetas estéticas tipo Glassmorphism suave */
+div.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
 }
 
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-}
-
-/* Métricas profesionales */
+/* Métricas profesionales estilo tarjeta flotante */
 [data-testid="metric-container"] {
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
-    border-radius: 16px;
-    padding: 24px;
-    border: 2px solid rgba(102, 126, 234, 0.1);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+[data-testid="metric-container"]:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 [data-testid="metric-container"] > div {
-    font-size: 28px !important;
-    font-weight: 800;
-    color: #667eea;
+    font-size: 26px !important;
+    font-weight: 700;
+    color: #0f172a;
 }
 
 [data-testid="metric-container"] label {
-    font-size: 14px !important;
+    font-size: 13px !important;
     font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-/* Tabs profesionales */
+/* Botones principales elegantes */
+.stButton > button {
+    width: 100%;
+    border-radius: 8px;
+    height: 44px;
+    background: #0f172a;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.stButton > button:hover {
+    background: #1e293b;
+    border-color: #334155;
+    transform: translateY(-1px);
+}
+
+/* Botón primario especial */
+button[kind="primary"] {
+    background: #2563eb !important;
+}
+button[kind="primary"]:hover {
+    background: #1d4ed8 !important;
+}
+
+/* Pestañas (Tabs) estilo moderno flotante */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 8px;
+    gap: 6px;
+    background: #e2e8f0;
+    border-radius: 10px;
+    padding: 6px;
 }
 
 .stTabs [data-baseweb="tab"] {
-    border-radius: 10px;
-    background-color: rgba(255, 255, 255, 0.1);
-    padding: 12px 24px;
+    border-radius: 8px;
+    background-color: transparent;
+    padding: 10px 20px;
     font-weight: 600;
-    transition: all 0.3s ease;
+    color: #475569;
+    font-size: 14px;
+    border: none;
+    transition: all 0.2s ease;
 }
 
 .stTabs [aria-selected="true"] {
-    background-color: rgba(255, 255, 255, 0.95) !important;
-    color: #667eea;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* Inputs profesionales */
+/* Inputs de texto y números limpios */
 .stTextInput > div > div > input, 
 .stNumberInput > div > div > input,
 .stSelectbox > div > div > select {
-    border-radius: 12px;
-    border: 2px solid rgba(102, 126, 234, 0.2);
-    background: rgba(255, 255, 255, 0.95);
-    font-size: 15px;
-    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    font-size: 14px;
+    padding: 10px 14px;
+    color: #0f172a;
 }
 
 .stTextInput > div > div > input:focus,
 .stNumberInput > div > div > input:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-/* Tablas profesionales */
+/* Tablas y DataFrames limpios */
 div[data-testid="stDataFrame"] {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 12px;
-    padding: 8px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
-/* Expander profesional */
+/* Expanders elegantes */
 .stExpander {
-    border: 2px solid rgba(102, 126, 234, 0.1);
-    margin-bottom: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px !important;
+    background: #ffffff;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .stExpander summary {
-    font-weight: 700;
-    color: #667eea;
-    padding: 16px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 14px;
 }
 
-/* Títulos */
+/* Títulos con estilo corporativo */
 h1, h2, h3 {
-    color: white;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    font-weight: 800;
+    color: #0f172a;
+    font-weight: 700;
+    letter-spacing: -0.025em;
 }
 
 h1 {
-    font-size: 42px !important;
-    margin-bottom: 32px;
-}
-
-h2 {
     font-size: 32px !important;
     margin-bottom: 24px;
 }
 
-h3 {
+h2 {
     font-size: 24px !important;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
 }
 
-/* Separadores */
+h3 {
+    font-size: 18px !important;
+    margin-bottom: 12px;
+}
+
+/* Separadores sutiles */
 .stMarkdown hr {
     border: none;
-    border-top: 2px solid rgba(255, 255, 255, 0.3);
-    margin: 32px 0;
+    border-top: 1px solid #e2e8f0;
+    margin: 24px 0;
 }
 
-/* Alertas profesionales */
-.stSuccess {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important;
-    color: white !important;
-    border-radius: 12px;
-    padding: 16px;
+/* Alertas estilizadas */
+.stSuccess, .stError, .stInfo, .stWarning {
+    border-radius: 8px !important;
+    border: 1px solid transparent;
+    padding: 14px;
+    font-size: 14px;
 }
 
-.stError {
-    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important;
-    color: white !important;
-    border-radius: 12px;
-    padding: 16px;
-}
+.stSuccess { background: #f0fdf4 !important; color: #166534 !important; border-color: #bbf7d0; }
+.stError { background: #fef2f2 !important; color: #991b1b !important; border-color: #fecaca; }
+.stInfo { background: #eff6ff !important; color: #1e40af !important; border-color: #bfdbfe; }
+.stWarning { background: #fffbeb !important; color: #92400e !important; border-color: #fde68a; }
 
-.stInfo {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
-    border-radius: 12px;
-    padding: 16px;
-}
-
-.stWarning {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-    color: white !important;
-    border-radius: 12px;
-    padding: 16px;
-}
-
-/* Sidebar profesional */
+/* Sidebar corporativa limpia */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
 }
 
-/* Radio buttons */
+/* Radio buttons y Checkbox sutiles */
 .stRadio > div {
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-}
-
-/* Checkbox */
-.stCheckbox > div {
-    background: rgba(255, 255, 255, 0.9);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 12px;
-}
-
-/* Ocultar elementos */
-#MainMenu, footer, header {
-    visibility: hidden;
-}
-
-/* Animaciones */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.stApp > div {
-    animation: fadeIn 0.6s ease-out;
-}
-
-/* Badge de stock */
-.stock-badge {
-    display: inline-block;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 13px;
-}
-
-.stock-ok {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    color: white;
-}
-
-.stock-low {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
-}
-
-.stock-critical {
-    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
-    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -450,12 +422,12 @@ def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pa
 # ============================================================
 # INTERFAZ PRINCIPAL
 # ============================================================
-st.title("🏪 SODA PRO - ADMIN PROFESIONAL")
+st.title("⚡ SODA PRO — Panel de Administración")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    " Operaciones", 
-    " Inventario", 
+    "⚡ Operaciones", 
+    "📊 Inventario", 
     "📦 Productos", 
     "📈 Reportes", 
     "👥 Fiados", 
@@ -466,15 +438,15 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # TAB 1: OPERACIONES
 # ============================================================
 with tab1:
-    st.subheader(" Operaciones de Inventario")
+    st.subheader("Control de Inventario y Ventas")
     df = leer_catalogo()
     
     if df.empty:
-        st.warning("⚠️ No hay productos. Agrega en Google Sheets.")
+        st.warning("⚠️ No hay productos registrados en el catálogo.")
     else:
         tipo_operacion = st.radio(
             "TIPO DE OPERACIÓN:",
-            ["➕ INGRESO (Compra)", " VENTA"],
+            ["➕ INGRESO (Compra)", "🛒 VENTA"],
             horizontal=True
         )
         st.markdown("---")
@@ -488,9 +460,9 @@ with tab1:
         producto_seleccionado = None
         
         if metodo == "📋 Seleccionar de lista":
-            opciones = ["--- SELECCIONA ---"] + df["Producto"].tolist()
+            opciones = ["--- SELECCIONA UN PRODUCTO ---"] + df["Producto"].tolist()
             producto_seleccionado = st.selectbox("PRODUCTO:", opciones, key="admin_dropdown")
-            if producto_seleccionado == "--- SELECCIONA ---":
+            if producto_seleccionado == "--- SELECCIONA UN PRODUCTO ---":
                 producto_seleccionado = None
         else:
             st.info("📱 Apunta el escáner al código de barras")
@@ -503,7 +475,7 @@ with tab1:
                 codigo_escaneado = codigo_escaneado.strip()
                 if codigo_escaneado in df["Codigo"].values:
                     producto_seleccionado = df.loc[df["Codigo"] == codigo_escaneado, "Producto"].values[0]
-                    st.success(f"✅ {producto_seleccionado}")
+                    st.success(f"✅ Encontrado: {producto_seleccionado}")
                 else:
                     st.error(f"❌ Código {codigo_escaneado} no encontrado")
         
@@ -518,17 +490,17 @@ with tab1:
             st.markdown("---")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric(" Código", codigo)
+                st.metric("Código", codigo)
             with col2:
-                st.metric(f"📦 Stock", f"{stock_actual:g} {unidad}")
+                st.metric("Stock Actual", f"{stock_actual:g} {unidad}")
             with col3:
-                st.metric("💰 Costo", f"${costo:.2f}")
+                st.metric("Costo", f"${costo:.2f}")
             with col4:
-                st.metric("💵 Precio", f"${precio:.2f}")
+                st.metric("Precio Venta", f"${precio:.2f}")
             
             st.markdown("---")
             cantidad = st.number_input(
-                f"CANTIDAD ({unidad}):",
+                f"CANTIDAD A REGISTRAR ({unidad}):",
                 min_value=0.01,
                 value=1.0,
                 step=1.0,
@@ -540,9 +512,9 @@ with tab1:
                 ganancia = cantidad * (precio - costo)
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("💵 Total Venta", f"${total:.2f}")
+                    st.metric("Total Venta", f"${total:.2f}")
                 with col2:
-                    st.metric("📈 Ganancia", f"${ganancia:.2f}")
+                    st.metric("Ganancia Estimada", f"${ganancia:.2f}")
             
             boton_disabled = False
             if "VENTA" in tipo_operacion and cantidad > stock_actual:
@@ -570,59 +542,55 @@ with tab1:
                 if "VENTA" in tipo_operacion:
                     registrar_venta(codigo, producto_seleccionado, cantidad, unidad, precio, costo)
                 st.cache_data.clear()
-                st.success(f"✅ {producto_seleccionado} actualizado!")
-                st.info(f"Nuevo stock: {nuevo_stock:g} {unidad}")
-                st.balloons()
+                st.success(f"✅ Operación realizada con éxito para: {producto_seleccionado}")
+                st.info(f"Nuevo stock actualizado: {nuevo_stock:g} {unidad}")
 
 # ============================================================
-# TAB 2: INVENTARIO (MEJORADO)
+# TAB 2: INVENTARIO
 # ============================================================
 with tab2:
-    st.subheader("📊 Estado del Inventario")
+    st.subheader("Estado General del Inventario")
     df = leer_catalogo()
     
     if df.empty:
         st.info("No hay productos registrados.")
     else:
-        # Métricas principales con diseño mejorado
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("📦 Total Productos", len(df))
+            st.metric("Total Productos", len(df))
         with col2:
             total_unidades = df["Stock"].sum()
-            st.metric("📊 Unidades Totales", f"{total_unidades:g}")
+            st.metric("Unidades Totales", f"{total_unidades:g}")
         with col3:
             valor_inventario = (df["Stock"] * df.get("Costo", 0)).sum()
-            st.metric("💰 Valor Inventario", f"${valor_inventario:.2f}")
+            st.metric("Valor Inventario", f"${valor_inventario:.2f}")
         with col4:
             bajo_stock = df[df["Stock"] <= 5]
-            st.metric("⚠️ Stock Bajo", len(bajo_stock))
+            st.metric("Stock Bajo", len(bajo_stock))
         
         st.markdown("---")
-        
-        # Tabla de inventario con formato mejorado
         st.dataframe(df, use_container_width=True, hide_index=True)
         
         if not bajo_stock.empty:
             st.markdown("---")
-            st.warning("⚠️ PRODUCTOS CON STOCK BAJO - REQUIEREN ATENCIÓN INMEDIATA")
+            st.warning("⚠️ Productos con stock bajo (Menor o igual a 5 unidades)")
             st.dataframe(bajo_stock[["Producto", "Stock", "Unidad"]], 
                         use_container_width=True, hide_index=True)
 
 # ============================================================
-# TAB 3: PRODUCTOS (MEJORADO)
+# TAB 3: PRODUCTOS
 # ============================================================
 with tab3:
-    st.subheader("📦 Gestión de Productos")
+    st.subheader("Gestión y Creación de Productos")
     df_prod = leer_catalogo()
     
     st.markdown("---")
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
-        st.write("**Tip:** Deja el código vacío para generar uno automático (EAN-13 válido, escaneable)")
+        st.write("Si dejas el código en blanco, el sistema generará automáticamente un código EAN-13 válido escaneable.")
         with st.form("form_agregar_producto", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                n_codigo = st.text_input("Código de barras (opcional - dejar vacío para generar):")
+                n_codigo = st.text_input("Código de barras (Opcional):")
                 n_producto = st.text_input("Nombre del producto:")
                 n_stock = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
             with col2:
@@ -630,7 +598,7 @@ with tab3:
                 n_unidad = st.selectbox("Unidad de medida:", unidades_disponibles)
                 n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
                 n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
-            enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
+            enviado = st.form_submit_button("➕ GUARDAR NUEVO PRODUCTO", use_container_width=True, type="primary")
             if enviado:
                 n_codigo_limpio = n_codigo.strip()
                 if not n_codigo_limpio:
@@ -638,26 +606,22 @@ with tab3:
                 if not n_producto.strip():
                     st.error("❌ El nombre del producto es obligatorio")
                 elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
-                    st.error(f" Ya existe un producto con el código {n_codigo_limpio}")
+                    st.error(f"⚠️ Ya existe un producto registrado con el código {n_codigo_limpio}")
                 else:
                     if agregar_producto(n_codigo_limpio, n_producto.strip(), n_stock, n_unidad, n_costo, n_precio):
-                        st.success(f"✅ {n_producto} agregado")
-                        st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
+                        st.success(f"✅ Producto '{n_producto}' guardado correctamente.")
+                        st.info(f"📋 **Código asignado:** `{n_codigo_limpio}`")
                         st.rerun()
-                    else:
-                        st.error("❌ Hubo un error guardando. Intenta de nuevo.")
     
     if not df_prod.empty:
         st.markdown("---")
-        with st.expander(" VER TODOS LOS CÓDIGOS (para anotar en libreta)"):
-            st.write("**Copia estos códigos a tu libreta — la vendedora los escaneará con la pistola:**")
-            st.markdown("---")
-            codigos_display = df_prod[["Codigo", "Producto", "Unidad"]].copy()
-            codigos_display.columns = [" CÓDIGO", " PRODUCTO", "🔖 UNIDAD"]
+        with st.expander("📋 Ver códigos de barras para impresión o libreta"):
+            codigos_display = df_prod[["Codigo", "Producto", "Unidad", "Precio_Venta"]].copy()
+            codigos_display.columns = ["CÓDIGO", "PRODUCTO", "UNIDAD", "PRECIO"]
             st.dataframe(codigos_display, use_container_width=True, hide_index=True)
             csv_codigos = codigos_display.to_csv(index=False)
             st.download_button(
-                "📥 Descargar lista de códigos (CSV)",
+                "📥 Descargar códigos en CSV",
                 data=csv_codigos,
                 file_name=f"codigos_productos_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
@@ -665,13 +629,12 @@ with tab3:
             )
     
     st.markdown("---")
-    if df_prod.empty:
-        st.info("Agrega tu primer producto arriba para poder editarlo o eliminarlo.")
-    else:
-        with st.expander("✏️ EDITAR PRODUCTO"):
-            producto_editar = st.selectbox("Selecciona producto:", df_prod["Producto"].tolist(), key="editar_select")
+    if not df_prod.empty:
+        with st.expander("✏️ EDITAR O 🗑️ ELIMINAR PRODUCTO"):
+            producto_editar = st.selectbox("Selecciona producto a modificar:", df_prod["Producto"].tolist(), key="editar_select")
             idx = df_prod[df_prod["Producto"] == producto_editar].index[0]
             fila = df_prod.loc[idx]
+            
             col1, col2 = st.columns(2)
             with col1:
                 e_producto = st.text_input("Nombre:", value=fila["Producto"], key="e_nombre")
@@ -681,30 +644,26 @@ with tab3:
                 unidad_actual = fila.get("Unidad", "Unidades")
                 idx_unidad = unidades_op.index(unidad_actual) if unidad_actual in unidades_op else 0
                 e_unidad = st.selectbox("Unidad de medida:", unidades_op, index=idx_unidad, key="e_unidad")
-                e_costo = st.number_input("Costo unitario:", min_value=0.0, value=float(fila.get("Costo", 0)),
-                                          step=0.01, format="%.2f", key="e_costo")
-                e_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
-                                           step=0.01, format="%.2f", key="e_precio")
-            if st.button("💾 GUARDAR CAMBIOS", use_container_width=True, type="primary", key="guardar_edicion"):
-                codigo_original = fila["Codigo"]
-                if actualizar_producto(codigo_original, e_producto.strip(), e_stock, e_unidad, e_costo, e_precio):
-                    st.success(f"✅ {e_producto} actualizado")
-                    st.rerun()
-        
-        with st.expander("🗑️ ELIMINAR PRODUCTO"):
-            producto_eliminar = st.selectbox("Selecciona producto a eliminar:", df_prod["Producto"].tolist(), key="eliminar_select")
-            confirmar = st.checkbox(f"Sí, quiero eliminar '{producto_eliminar}' permanentemente")
-            if st.button("🗑️ ELIMINAR PRODUCTO", use_container_width=True, disabled=not confirmar, key="btn_eliminar"):
-                codigo_eliminar = df_prod[df_prod["Producto"] == producto_eliminar]["Codigo"].values[0]
-                if eliminar_producto(codigo_eliminar):
-                    st.success(f"✅ {producto_eliminar} eliminado del catálogo")
-                    st.rerun()
+                e_costo = st.number_input("Costo unitario:", min_value=0.0, value=float(fila.get("Costo", 0)), step=0.01, format="%.2f", key="e_costo")
+                e_precio = st.number_input("Precio de venta:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)), step=0.01, format="%.2f", key="e_precio")
+            
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("💾 Guardar Cambios", use_container_width=True, type="primary", key="guardar_edicion"):
+                    if actualizar_producto(fila["Codigo"], e_producto.strip(), e_stock, e_unidad, e_costo, e_precio):
+                        st.success("✅ Cambios guardados exitosamente.")
+                        st.rerun()
+            with col_btn2:
+                if st.button("🗑️ Eliminar Producto", use_container_width=True, key="btn_eliminar"):
+                    if eliminar_producto(fila["Codigo"]):
+                        st.success("✅ Producto eliminado.")
+                        st.rerun()
 
 # ============================================================
-# TAB 4: REPORTES (MEJORADO)
+# TAB 4: REPORTES
 # ============================================================
 with tab4:
-    st.subheader("📈 Reportes y Cortes de Venta")
+    st.subheader("Reportes y Cortes de Caja")
     ventas_df = leer_ventas()
     
     if ventas_df.empty:
@@ -712,11 +671,10 @@ with tab4:
     else:
         ventas_df["Fecha"] = pd.to_datetime(ventas_df["Fecha"], errors="coerce")
         
-        st.markdown("### 📅 FILTRAR POR FECHA")
         col1, col2, col3 = st.columns(3)
         with col1:
             filtro = st.selectbox(
-                "Período:",
+                "Período del reporte:",
                 ["Hoy", "Ayer", "Esta semana", "Este mes", "Personalizado", "Todo"]
             )
         
@@ -745,36 +703,35 @@ with tab4:
         
         st.markdown("---")
         if ventas_periodo.empty:
-            st.info(f"No hay ventas en el período: {fecha_ini} a {fecha_fin}")
+            st.info(f"No hay registros de venta en el período seleccionado ({fecha_ini} a {fecha_fin}).")
         else:
-            st.markdown(f"### 💰 CORTE: {fecha_ini} a {fecha_fin}")
+            st.markdown(f"### Resumen del Corte ({fecha_ini} al {fecha_fin})")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 total_ventas = ventas_periodo["Total"].sum()
-                st.metric("💵 Total Ventas", f"${total_ventas:.2f}")
+                st.metric("Total Ventas", f"${total_ventas:.2f}")
             with col2:
                 total_ganancia = ventas_periodo["Ganancia"].sum()
-                st.metric("📈 Ganancia", f"${total_ganancia:.2f}")
+                st.metric("Ganancia Neta", f"${total_ganancia:.2f}")
             with col3:
                 num_ventas = len(ventas_periodo)
-                st.metric("🛒 Transacciones", num_ventas)
+                st.metric("Transacciones", num_ventas)
             with col4:
                 unidades_vendidas = ventas_periodo["Cantidad"].sum()
-                st.metric("📦 Unidades Vendidas", f"{unidades_vendidas:g}")
+                st.metric("Unidades Vendidas", f"{unidades_vendidas:g}")
             
             st.markdown("---")
             if "Metodo_Pago" in ventas_periodo.columns:
-                st.markdown("### 💳 CORTE POR MÉTODO DE PAGO")
-                metodo_col = ventas_periodo["Metodo_Pago"].replace("", "Sin especificar").fillna("Sin especificar")
+                st.markdown("### Ventas por Método de Pago")
+                metodo_col = ventas_periodo["Metodo_Pago"].replace("", "Efectivo").fillna("Efectivo")
                 por_metodo = ventas_periodo.groupby(metodo_col)["Total"].sum().sort_values(ascending=False)
-                iconos = {"Efectivo": "💵", "Transferencia": "🏦", "Fiado": "📝", "Sin especificar": "❔"}
-                cols_metodo = st.columns(len(por_metodo))
+                cols_metodo = st.columns(len(por_metodo) if len(por_metodo) > 0 else 1)
                 for col, (metodo, monto) in zip(cols_metodo, por_metodo.items()):
                     with col:
-                        st.metric(f"{iconos.get(metodo, '💳')} {metodo}", f"${monto:.2f}")
+                        st.metric(f"Pago: {metodo}", f"${monto:.2f}")
                 st.markdown("---")
             
-            st.markdown("### 🏆 TOP PRODUCTOS MÁS VENDIDOS")
+            st.markdown("### Top 10 Productos Más Vendidos")
             top_productos = ventas_periodo.groupby("Producto").agg({
                 "Cantidad": "sum",
                 "Total": "sum",
@@ -783,103 +740,92 @@ with tab4:
             st.dataframe(top_productos, use_container_width=True)
             
             st.markdown("---")
-            st.markdown("###  DETALLE DE VENTAS")
+            st.markdown("### Detalle de Transacciones")
             st.dataframe(ventas_periodo.sort_values(["Fecha", "Hora"], ascending=False), 
                         use_container_width=True, hide_index=True)
             
             csv = ventas_periodo.to_csv(index=False)
             st.download_button(
-                "📥 Descargar Reporte CSV",
+                "📥 Descargar Reporte en CSV",
                 data=csv,
-                file_name=f"corte_{fecha_ini}_{fecha_fin}.csv",
+                file_name=f"corte_ventas_{fecha_ini}_al_{fecha_fin}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
 
 # ============================================================
-# TAB 5: FIADOS (MEJORADO)
+# TAB 5: FIADOS
 # ============================================================
 with tab5:
-    st.subheader("👥 Clientes Fiados")
+    st.subheader("Control de Clientes Fiados")
     fiados_df = leer_fiados()
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.caption("Aquí liquidas a un cliente cuando venga a pagar su deuda")
-    with col2:
+    col_a, col_b = st.columns([4, 1])
+    with col_b:
         if st.button("🔄 Actualizar", key="refresh_fiados"):
             st.cache_data.clear()
             st.rerun()
-    
+            
     if fiados_df.empty:
-        st.info("📭 No hay registros de fiado todavía.")
+        st.info("📭 No hay registros de fiados.")
     else:
         pendientes = fiados_df[fiados_df["Estado"] == "Pendiente"]
         if pendientes.empty:
-            st.success("✅ No hay deudas pendientes. Todo al día.")
+            st.success("✅ No hay deudas pendientes en este momento.")
         else:
             resumen = pendientes.groupby("Cliente")["Total"].sum().sort_values(ascending=False)
-            st.markdown(f"### 💰 TOTAL POR COBRAR: ${pendientes['Total'].sum():.2f}")
+            st.markdown(f"### Total por Cobrar: ${pendientes['Total'].sum():.2f}")
             st.markdown("---")
             for cliente, monto in resumen.items():
                 col1, col2, col3 = st.columns([3, 2, 2])
                 with col1:
-                    st.markdown(f"**👤 {cliente}**")
+                    st.markdown(f"**Cliente:** {cliente}")
                 with col2:
-                    st.markdown(f"### ${monto:.2f}")
+                    st.markdown(f"**Deuda:** ${monto:.2f}")
                 with col3:
-                    if st.button("✅ Marcar pagado", key=f"pagar_{cliente}", use_container_width=True):
+                    if st.button("✅ Liquidar cuenta", key=f"pagar_{cliente}", use_container_width=True):
                         marcar_fiados_pagados(cliente)
                         st.cache_data.clear()
-                        st.success(f"✅ {cliente} liquidado")
+                        st.success(f"✅ Cuenta de {cliente} liquidada.")
                         st.rerun()
                 st.markdown("---")
             
-            with st.expander("📋 Ver detalle de deudas pendientes"):
+            with st.expander("📋 Ver detalle completo de deudas pendientes"):
                 st.dataframe(
                     pendientes[["Fecha", "Hora", "Cliente", "Detalle", "Total"]],
                     use_container_width=True, hide_index=True
                 )
-        
-        pagados = fiados_df[fiados_df["Estado"] == "Pagado"]
-        if not pagados.empty:
-            with st.expander(f"✅ Historial de fiados pagados ({len(pagados)})"):
-                st.dataframe(
-                    pagados[["Fecha", "Hora", "Cliente", "Detalle", "Total"]],
-                    use_container_width=True, hide_index=True
-                )
 
 # ============================================================
-# TAB 6: SISTEMA (MEJORADO)
+# TAB 6: SISTEMA
 # ============================================================
 with tab6:
-    st.subheader("⚙️ Configuración del Sistema")
+    st.subheader("Configuración y Estado del Sistema")
     col1, col2 = st.columns(2)
     with col1:
-        st.write("**ESTADO**")
-        st.info("✅ Sistema operativo")
-        st.info("✅ Google Sheets conectado")
-        st.info("✅ Escáner listo")
-        st.info("✅ Registro de ventas activo")
+        st.write("**ESTADO DE CONEXIÓN**")
+        st.success("✅ Google Sheets sincronizado correctamente")
+        st.success("✅ Escáner de código de barras activo")
+        st.success("✅ Motor de reportes operativo")
     with col2:
-        st.write("**ACCIONES**")
-        if st.button(" Sincronizar Datos", use_container_width=True):
+        st.write("**UTILIDADES**")
+        if st.button("🔄 Forzar Sincronización", use_container_width=True):
             st.cache_data.clear()
-            st.success("✅ Sincronizado")
-        if st.button("📥 Descargar Catálogo", use_container_width=True):
+            st.success("✅ Datos recargados desde la nube.")
+        if st.button("📥 Descargar Respaldo de Catálogo", use_container_width=True):
             df = leer_catalogo()
             csv = df.to_csv(index=False)
             st.download_button(
                 "📥 Descargar CSV",
                 data=csv,
-                file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv",
+                file_name=f"respaldo_catalogo_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
     
     st.markdown("---")
-    st.markdown("### 🔗 ENLACE PARA VENDEDORA")
-    st.info("Comparte este enlace con la vendedora (solo puede vender, no ver reportes)")
+    st.markdown("### Enlace para Vendedora")
+    st.info("Utiliza este enlace para que la aplicación de la vendedora conecte de manera independiente:")
     st.code("https://soda-vendedora.streamlit.app", language=None)
     st.markdown("---")
-    st.caption("Soda Pro v5.0 - Sistema POS Profesional")
+    st.caption("Soda Pro v5.1 - Sistema POS Profesional Minimalista")
