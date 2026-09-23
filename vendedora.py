@@ -1,459 +1,142 @@
-"""
-SODA PRO - APP VENDEDORA v4.1
-Carrito + Ticket digital (WhatsApp) + Métodos de pago + Cambio + Modo Fiado
-"""
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
+import sqlite3
+import streamlit.components.v1 as components
 from datetime import datetime
-import urllib.parse
 
-# ============================================================
-# CONFIGURACIÓN
-# ============================================================
-st.set_page_config(
-    page_title="Punto de Venta",
-    page_icon="🛒",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
-# ============================================================
-# CSS PREMIUM
-# ============================================================
-st.markdown("""
-<style>
-.stApp {
-    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-    background-size: 400% 400%;
-    animation: gradientBG 15s ease infinite;
-}
-@keyframes gradientBG {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-.stButton > button, .stLinkButton > a {
-    width: 100%; border-radius: 20px; height: 4em;
-    background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
-    color: white; font-weight: bold; font-size: 20px; border: none;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.3); transition: all 0.3s ease;
-    display: flex; align-items: center; justify-content: center;
-}
-.stButton > button:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
-[data-testid="metric-container"] {
-    background: rgba(255,255,255,0.98); border-radius: 20px; padding: 20px;
-    text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.2); border: 3px solid rgba(255,255,255,0.5);
-}
-[data-testid="metric-container"] > div { font-size: 24px !important; font-weight: bold; }
-[data-testid="metric-container"] label { font-size: 16px !important; font-weight: bold; color: #333; }
-#MainMenu, footer, header { visibility: hidden; }
-h1 { color: white; text-align: center; text-shadow: 0 4px 15px rgba(0,0,0,0.3);
-     font-size: 42px !important; font-weight: 900; letter-spacing: 2px; }
-h2, h3 { color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-.stTextInput input {
-    font-size: 22px !important; height: 65px !important; border-radius: 20px !important;
-    text-align: center; border: 3px solid rgba(255,255,255,0.5) !important;
-    background: rgba(255,255,255,0.95) !important; box-shadow: 0 6px 20px rgba(0,0,0,0.15); font-weight: bold;
-}
-.stNumberInput input { font-size: 22px !important; height: 55px !important; text-align: center; border-radius: 15px !important; }
-.total-grande {
-    background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-    color: white; padding: 25px; border-radius: 20px; text-align: center;
-    font-size: 32px; font-weight: 900; box-shadow: 0 8px 25px rgba(0,0,0,0.3); margin: 20px 0;
-}
-.ticket-box {
-    background: rgba(255,255,255,0.97); border-radius: 15px; padding: 20px;
-    font-family: 'Courier New', monospace; font-size: 15px; white-space: pre-wrap;
-    color: #222; box-shadow: 0 6px 20px rgba(0,0,0,0.2); margin: 15px 0;
-}
-.stAlert { border-radius: 15px !important; border: none !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
-.stSuccess { background: linear-gradient(90deg, #11998e, #38ef7d) !important; color: white !important; }
-.stError { background: linear-gradient(90deg, #ff416c, #ff4b2b) !important; color: white !important; }
-.stInfo { background: linear-gradient(90deg, #667eea, #764ba2) !important; color: white !important; }
-.stRadio { background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# GOOGLE SHEETS
-# ============================================================
-SHEET_ID = "1Cq1KKnmNqMhtaDN_vsj__WofYtSUfc8jyPOUrjV9i3Y"
-try:
-    CREDENTIALS = dict(st.secrets["google_credentials"])
-except Exception:
-    st.error("⚠️ Faltan las credenciales de Google. Pídele al administrador que configure los 'Secrets'.")
-    st.stop()
-
-SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-HEADERS_CATALOGO = ["Codigo", "Producto", "Stock", "Unidad de Venta", "Costo", "Precio_Venta"]
-HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad de Venta", 
-                  "Precio_Unit", "Costo_Unit", "Total", "Ganancia", "Metodo_Pago", "Cliente"]
-HEADERS_FIADOS = ["Fecha", "Hora", "Cliente", "Detalle", "Total", "Estado"]
-
-# ============================================================
-# FUNCIONES
-# ============================================================
-def get_spreadsheet():
-    creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(SHEET_ID)
-
-def get_catalog_ws():
-    return get_spreadsheet().get_worksheet(0)
-
-def get_ventas_ws():
-    sh = get_spreadsheet()
-    try:
-        ws = sh.worksheet("Ventas")
-        if ws.row_values(1) != HEADERS_VENTAS:
-            ws.update('A1', [HEADERS_VENTAS])
-        return ws
-    except:
-        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=12)
-        ws.append_row(HEADERS_VENTAS)
-        return ws
-
-def get_fiados_ws():
-    sh = get_spreadsheet()
-    try:
-        return sh.worksheet("Fiados")
-    except:
-        ws = sh.add_worksheet(title="Fiados", rows=500, cols=6)
-        ws.append_row(HEADERS_FIADOS)
-        return ws
-
-def leer_ws_seguro(ws, headers_esperados):
-    """Lee una hoja ignorando columnas duplicadas o basura extra"""
-    data = ws.get_all_values()
-    if not data or len(data) < 2:
-        return pd.DataFrame(columns=headers_esperados)
-    
-    filas = []
-    num_cols = len(headers_esperados)
-    for fila in data[1:]:
-        fila_limpia = (fila + [""] * num_cols)[:num_cols]
-        if any(str(c).strip() for c in fila_limpia):
-            filas.append(fila_limpia)
-            
-    return pd.DataFrame(filas, columns=headers_esperados)
-
-@st.cache_data(ttl=30)
-def leer_catalogo():
-    ws = get_catalog_ws()
-    df = leer_ws_seguro(ws, HEADERS_CATALOGO)
-    
-    for col in ["Stock", "Costo", "Precio_Venta"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-    df["Codigo"] = df["Codigo"].astype(str)
-    df["Unidad de Venta"] = df["Unidad de Venta"].replace("", "Unidades").fillna("Unidades")
-    return df
-
-def actualizar_stock_producto(codigo, nuevo_stock):
-    try:
-        ws = get_catalog_ws()
-        data = ws.get_all_values()
-        for idx, fila in enumerate(data[1:], start=2):
-            if len(fila) > 0 and str(fila[0]).strip() == str(codigo):
-                ws.update_cell(idx, 3, float(nuevo_stock))
-                st.cache_data.clear()
-                return True
-        return False
-    except Exception as e:
-        st.error(f"❌ Error actualizando stock: {str(e)}")
-        return False
-
-def registrar_venta(codigo, producto, cantidad, unidad_venta, precio, costo, metodo_pago="Efectivo", cliente=""):
-    ws_ventas = get_ventas_ws()
-    ahora = datetime.now()
-    total = cantidad * precio
-    ganancia = cantidad * (precio - costo)
-    ws_ventas.append_row([
-        ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"),
-        str(codigo), producto, cantidad, unidad_venta,
-        precio, costo, total, ganancia, metodo_pago, cliente
-    ])
-
-def registrar_fiado(cliente, detalle, total):
-    ws_fiados = get_fiados_ws()
-    ahora = datetime.now()
-    ws_fiados.append_row([
-        ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"),
-        cliente, detalle, total, "Pendiente"
-    ])
-
-def generar_ticket(carrito, total, metodo_pago, monto_recibido=None, cambio=None, cliente=""):
-    ahora = datetime.now()
-    lineas = []
-    lineas.append("SODA PRO")
-    lineas.append(f"{ahora.strftime('%d/%m/%Y')}  {ahora.strftime('%H:%M')}")
-    lineas.append("------------------------------")
-    for item in carrito:
-        lineas.append(f"{item['producto']} x{item['cantidad']:g}  ${item['subtotal']:.2f}")
-    lineas.append("------------------------------")
-    lineas.append(f"TOTAL: ${total:.2f}")
-    lineas.append(f"Metodo: {metodo_pago}")
-    if metodo_pago == "Efectivo" and monto_recibido is not None:
-        lineas.append(f"Recibido: ${monto_recibido:.2f}")
-        lineas.append(f"Cambio: ${cambio:.2f}")
-    if metodo_pago == "Fiado":
-        lineas.append(f"Cliente: {cliente}")
-        lineas.append("PENDIENTE DE PAGO")
-    lineas.append("------------------------------")
-    lineas.append("¡Gracias por su compra!")
-    return "\n".join(lineas)
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-defaults = {
-    "carrito": [], "ventas_hoy": 0, "total_hoy": 0.0,
-    "ticket_texto": None, "ticket_link": None,
-    "input_counter": 0, "venta_counter": 0, "busqueda_counter": 0,
-    "ultima_venta_carrito": [], "ultima_venta_metodo": "", "ultima_venta_total": 0.0,
-    "flash": None,
-}
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-def agregar_al_carrito(df, codigo):
-    if codigo not in df["Codigo"].values:
-        return False
-    fila = df[df["Codigo"] == codigo].iloc[0]
-    for item in st.session_state.carrito:
-        if item["codigo"] == codigo:
-            item["cantidad"] += 1
-            item["subtotal"] = item["cantidad"] * item["precio"]
-            return True
-    st.session_state.carrito.append({
-        "codigo": codigo, "producto": fila["Producto"], "cantidad": 1,
-        "unidad_venta": fila.get("Unidad de Venta", "Unidades"),
-        "precio": float(fila.get("Precio_Venta", 0)), "costo": float(fila.get("Costo", 0)),
-        "subtotal": float(fila.get("Precio_Venta", 0)), "stock_disponible": float(fila["Stock"])
-    })
-    return True
-
-def deshacer_ultima_venta():
-    df_actual = leer_catalogo()
-    for item in st.session_state.ultima_venta_carrito:
-        idx = df_actual[df_actual["Codigo"] == item["codigo"]].index
-        if len(idx):
-            nuevo_stock = df_actual.at[idx[0], "Stock"] + item["cantidad"]
-            actualizar_stock_producto(item["codigo"], nuevo_stock)
-    try:
-        ws_v = get_ventas_ws()
-        total_filas = len(ws_v.get_all_values())
-        n = len(st.session_state.ultima_venta_carrito)
-        if n > 0 and total_filas > n:
-            ws_v.delete_rows(total_filas - n + 1, total_filas)
-    except Exception:
-        pass
-    
-    if st.session_state.ultima_venta_metodo == "Fiado":
-        try:
-            ws_f = get_fiados_ws()
-            total_f = len(ws_f.get_all_values())
-            if total_f > 1:
-                ws_f.delete_rows(total_f)
-        except Exception:
-            pass
-            
-    st.session_state.ventas_hoy = max(0, st.session_state.ventas_hoy - 1)
-    st.session_state.total_hoy = max(0.0, st.session_state.total_hoy - st.session_state.ultima_venta_total)
-    st.session_state.ticket_texto = None
-    st.session_state.ticket_link = None
-    st.session_state.ultima_venta_carrito = []
-    st.session_state.venta_counter += 1
-    st.session_state.flash = "↩️ Venta corregida. El stock fue restaurado."
-    st.cache_data.clear()
-
-# ============================================================
-# INTERFAZ
-# ============================================================
-st.title("🛒 PUNTO DE VENTA")
-
-if st.session_state.flash:
-    st.info(st.session_state.flash)
-    st.session_state.flash = None
-
-if st.session_state.ticket_texto:
-    st.success("### 🎉 ¡VENTA REGISTRADA!")
-    st.markdown(f'<div class="ticket-box">{st.session_state.ticket_texto}</div>', unsafe_allow_html=True)
-    if st.session_state.ticket_link:
-        st.link_button("📲 Enviar por WhatsApp", st.session_state.ticket_link, use_container_width=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("↩️ CORREGIR (anular)", use_container_width=True):
-            deshacer_ultima_venta()
-            st.rerun()
-    with col2:
-        if st.button("🆕 NUEVA VENTA", use_container_width=True):
-            st.session_state.ticket_texto = None
-            st.session_state.ticket_link = None
-            st.rerun()
-    st.markdown("---")
-
-col1, col2, col3 = st.columns([2, 2, 1])
-with col1:
-    st.metric("🛒 Ventas HOY", st.session_state.ventas_hoy)
-with col2:
-    st.metric("💵 Total HOY", f"${st.session_state.total_hoy:.2f}")
-with col3:
-    st.write("")
-    if st.button("🔄", use_container_width=True, help="Actualizar datos"):
-        st.cache_data.clear()
-        st.rerun()
-
-st.markdown("---")
-df = leer_catalogo()
-
-if df.empty:
-    st.error("❌ No hay productos. Contacta al administrador.")
-else:
-    st.markdown("### 📷 ESCANEA EL PRODUCTO")
-    codigo_escaneado = st.text_input(
-        "", placeholder="Apunta el escáner o escribe el código...",
-        key=f"scanner_input_{st.session_state.input_counter}", label_visibility="collapsed"
-    )
-    
-    if codigo_escaneado:
-        codigo_escaneado = codigo_escaneado.strip()
-        st.session_state.ticket_texto = None
-        st.session_state.ticket_link = None
-        if not agregar_al_carrito(df, codigo_escaneado):
-            st.error(f"❌ Código {codigo_escaneado} NO existe")
-        st.session_state.input_counter += 1
-        st.rerun()
-
-    with st.expander("🔎 ¿No lee el código? Busca el producto por nombre"):
-        opciones_busqueda = ["--- Selecciona un producto ---"] + sorted(df["Producto"].dropna().unique().tolist())
-        seleccion = st.selectbox(
-            "Producto:", opciones_busqueda,
-            key=f"buscar_{st.session_state.busqueda_counter}", label_visibility="collapsed"
-        )
-        if seleccion != "--- Selecciona un producto ---":
-            codigo_sel = str(df.loc[df["Producto"] == seleccion, "Codigo"].values[0])
-            st.session_state.ticket_texto = None
-            st.session_state.ticket_link = None
-            agregar_al_carrito(df, codigo_sel)
-            st.session_state.busqueda_counter += 1
-            st.rerun()
-
-    st.markdown("---")
-
-    if st.session_state.carrito:
-        st.markdown("### 🛒 CARRITO DE COMPRAS")
-        total_carrito = 0
-        items_a_eliminar = []
-        
-        for i, item in enumerate(st.session_state.carrito):
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            with col1:
-                st.markdown(f"**{item['producto']}**")
-                st.caption(f"${item['precio']:.2f} × {item['cantidad']:g} {item['unidad_venta']}")
-            with col2:
-                nueva_cantidad = st.number_input(
-                    "Cant:", min_value=0.01, value=float(item['cantidad']),
-                    step=1.0, key=f"cant_{i}", label_visibility="collapsed"
-                )
-                if nueva_cantidad != item['cantidad']:
-                    item['cantidad'] = nueva_cantidad
-                    item['subtotal'] = nueva_cantidad * item['precio']
-            with col3:
-                st.markdown(f"### ${item['subtotal']:.2f}")
-            with col4:
-                if st.button("🗑️", key=f"del_{i}"):
-                    items_a_eliminar.append(i)
-            total_carrito += item['subtotal']
-            st.markdown("---")
-            
-        for i in sorted(items_a_eliminar, reverse=True):
-            st.session_state.carrito.pop(i)
-            st.rerun()
-            
-        st.markdown(f'<div class="total-grande">💰 TOTAL A COBRAR<br>${total_carrito:.2f}</div>', unsafe_allow_html=True)
-        
-        st.markdown("### 💳 MÉTODO DE PAGO")
-        metodo_opciones = {"💵 Efectivo": "Efectivo", "🏦 Transferencia": "Transferencia", "📝 Fiado": "Fiado"}
-        metodo_pago_raw = st.radio(
-            "Método:", list(metodo_opciones.keys()),
-            horizontal=True, key=f"metodo_{st.session_state.venta_counter}", label_visibility="collapsed"
-        )
-        metodo_pago = metodo_opciones[metodo_pago_raw]
-        
-        monto_recibido, cambio, cliente = None, None, ""
-        puede_cobrar = True
-        
-        if metodo_pago == "Efectivo":
-            monto_recibido = st.number_input(
-                "💵 Monto recibido:", min_value=0.0, value=float(total_carrito),
-                step=1.0, key=f"monto_{st.session_state.venta_counter}"
-            )
-            cambio = monto_recibido - total_carrito
-            if monto_recibido < total_carrito:
-                st.warning(f"⚠️ Faltan ${total_carrito - monto_recibido:.2f}")
-                puede_cobrar = False
-            else:
-                st.metric("💰 Cambio a devolver", f"${cambio:.2f}")
-        elif metodo_pago == "Fiado":
-            cliente = st.text_input("👤 Nombre del cliente:", key=f"cliente_{st.session_state.venta_counter}")
-            if not cliente.strip():
-                st.warning("⚠️ Escribe el nombre del cliente para dejarlo fiado")
-                puede_cobrar = False
-            else:
-                st.info(f"📝 Se registrará como deuda pendiente de **{cliente}**")
-                
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("❌ CANCELAR", use_container_width=True):
-                st.session_state.carrito = []
-                st.session_state.venta_counter += 1
-                st.rerun()
-        with col2:
-            if st.button("✅ COBRAR", type="primary", use_container_width=True, disabled=not puede_cobrar):
-                stock_ok = True
-                for item in st.session_state.carrito:
-                    fila = df[df["Codigo"] == item["codigo"]].iloc[0]
-                    stock_real = float(fila["Stock"])
-                    if item["cantidad"] > stock_real:
-                        st.error(f"❌ Stock insuficiente para {item['producto']}. Solo hay {stock_real:g}")
-                        stock_ok = False
-                        break
-                        
-                if stock_ok:
-                    for item in st.session_state.carrito:
-                        fila_idx = df[df["Codigo"] == item["codigo"]].index[0]
-                        nuevo_stock = df.at[fila_idx, "Stock"] - item["cantidad"]
-                        actualizar_stock_producto(item["codigo"], nuevo_stock)
-                        registrar_venta(
-                            item["codigo"], item["producto"], item["cantidad"],
-                            item["unidad_venta"], item["precio"], item["costo"],
-                            metodo_pago=metodo_pago, cliente=cliente
-                        )
-                    
-                    if metodo_pago == "Fiado":
-                        detalle = ", ".join(f"{it['producto']} x{it['cantidad']:g}" for it in st.session_state.carrito)
-                        registrar_fiado(cliente, detalle, total_carrito)
-                        
-                    ticket = generar_ticket(
-                        st.session_state.carrito, total_carrito, metodo_pago,
-                        monto_recibido=monto_recibido, cambio=cambio, cliente=cliente
-                    )
-                    st.session_state.ticket_texto = ticket
-                    st.session_state.ticket_link = "https://api.whatsapp.com/send?text=" + urllib.parse.quote(ticket)
-                    st.session_state.ultima_venta_carrito = list(st.session_state.carrito)
-                    st.session_state.ultima_venta_metodo = metodo_pago
-                    st.session_state.ultima_venta_total = total_carrito
-                    st.session_state.ventas_hoy += 1
-                    st.session_state.total_hoy += total_carrito
-                    st.session_state.carrito = []
-                    st.session_state.venta_counter += 1
-                    st.cache_data.clear()
-                    st.balloons()
-                    st.rerun()
+# Función auxiliar para conectar a la DB
+def ejecutar_query(query, params=(), fetch=False):
+    conn = sqlite3.connect("inventario.db") # Asegúrate de usar la ruta correcta a tu DB
+    c = conn.cursor()
+    c.execute(query, params)
+    if fetch:
+        result = c.fetchall()
     else:
-        st.info("🛒 El carrito está vacío. Escanea productos para empezar.")
+        result = None
+    conn.commit()
+    conn.close()
+    return result
+
+def page_punto_de_venta():
+    st.title("🛒 Punto de Venta Rápido")
+
+    # 1. Inicializar el carrito en la sesión si no existe
+    if "carrito" not in st.session_state:
+        st.session_state.carrito = {} # Usamos diccionario para agrupar cantidades rápido por código
+
+    # 2. HACK PRO: Inyectar JavaScript para forzar el Autofocus en el campo del escáner
+    components.html(
+        """
+        <script>
+        const doc = window.parent.document;
+        // Busca el primer input de texto en la pantalla y lo enfoca continuamente
+        function setFocus() {
+            const input = doc.querySelector('input[aria-label="Código de Barras (Escáner)"]');
+            if(input) { input.focus(); }
+        }
+        setInterval(setFocus, 1000); // Re-enfoca cada segundo por si la vendedora da clic fuera
+        </script>
+        """,
+        height=0
+    )
+
+    col_escaner, col_carrito = st.columns([1, 2])
+
+    with col_escaner:
+        st.markdown("### 🔍 Lector")
+        st.info("El cursor está fijado automáticamente. Solo dispara el escáner.")
+        
+        # Formulario con clear_on_submit=True para lectura a ráfagas
+        with st.form("escaner_form", clear_on_submit=True):
+            codigo_ingresado = st.text_input("Código de Barras (Escáner)", label_visibility="collapsed", placeholder="Dispara el escáner aquí...")
+            btn_agregar = st.form_submit_button("Agregar (Enter)", use_container_width=True)
+
+            if btn_agregar and codigo_ingresado:
+                codigo = codigo_ingresado.strip()
+                
+                # Buscar en Bebidas primero
+                producto = ejecutar_query("SELECT nombre, precio, stock FROM bebidas WHERE codigo_barras=?", (codigo,), fetch=True)
+                tabla_origen = "bebidas"
+                
+                # Si no está en Bebidas, buscar en Joyería
+                if not producto:
+                    producto = ejecutar_query("SELECT nombre, precio, stock FROM joyeria WHERE codigo_barras=?", (codigo,), fetch=True)
+                    tabla_origen = "joyeria"
+
+                if producto:
+                    nombre, precio, stock_disponible = producto[0]
+                    
+                    # Calcular cuántos hay ya en el carrito para no exceder el stock físico
+                    cantidad_en_carrito = st.session_state.carrito.get(codigo, {}).get("cantidad", 0)
+                    
+                    if cantidad_en_carrito < stock_disponible:
+                        if codigo in st.session_state.carrito:
+                            st.session_state.carrito[codigo]["cantidad"] += 1
+                            st.session_state.carrito[codigo]["subtotal"] = st.session_state.carrito[codigo]["cantidad"] * precio
+                        else:
+                            st.session_state.carrito[codigo] = {
+                                "nombre": nombre,
+                                "precio": precio,
+                                "cantidad": 1,
+                                "subtotal": precio,
+                                "origen": tabla_origen
+                            }
+                        st.rerun()
+                    else:
+                        st.error(f"¡Stock insuficiente! Solo quedan {stock_disponible} unidades de {nombre}.")
+                else:
+                    st.error("❌ Producto no encontrado.")
+
+    with col_carrito:
+        st.markdown("### 🛍️ Detalle de Venta")
+        
+        if st.session_state.carrito:
+            # Convertir el diccionario a DataFrame para mostrarlo bonito
+            df_carrito = pd.DataFrame(st.session_state.carrito.values())
+            # Reordenar y renombrar columnas para la vendedora
+            df_mostrar = df_carrito[["nombre", "precio", "cantidad", "subtotal"]]
+            df_mostrar.columns = ["Producto", "Precio Unitario", "Cantidad", "Subtotal"]
+            
+            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+            
+            total_pagar = df_carrito["subtotal"].sum()
+            
+            st.markdown(f"<h2 style='text-align: right; color: #10b981;'>Total a Cobrar: ${total_pagar:.2f}</h2>", unsafe_allow_html=True)
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("🗑️ Vaciar Carrito", use_container_width=True):
+                    st.session_state.carrito = {}
+                    st.rerun()
+                    
+            with col_btn2:
+                if st.button("💰 PROCESAR PAGO", type="primary", use_container_width=True):
+                    # Iniciar transacción segura para descontar stock
+                    conn = sqlite3.connect("inventario.db")
+                    c = conn.cursor()
+                    try:
+                        for cod, data in st.session_state.carrito.items():
+                            tabla = data["origen"]
+                            cantidad_vendida = data["cantidad"]
+                            
+                            # Actualizar stock dinámicamente según la tabla origen
+                            c.execute(f"UPDATE {tabla} SET stock = stock - ? WHERE codigo_barras = ?", 
+                                      (cantidad_vendida, cod))
+                        
+                        # Aquí podrías insertar la transacción en una tabla 'ventas_historial'
+                        # c.execute("INSERT INTO ventas (total, fecha) VALUES (?, ?)", (total_pagar, datetime.now()))
+                        
+                        conn.commit()
+                        st.session_state.carrito = {} # Limpiar carrito tras pago exitoso
+                        st.success("✅ Venta procesada y stock descontado.")
+                        # Usar time.sleep(1.5) aquí si quieres que vea el mensaje antes de recargar
+                        st.rerun()
+                        
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"Error crítico al procesar: {e}")
+                    finally:
+                        conn.close()
+        else:
+            st.info("El carrito está vacío. Escanea el primer producto.")
