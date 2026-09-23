@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-from datetime import datetime
 
 # ==========================================
 # CONFIGURACIÓN Y BASE DE DATOS
@@ -59,16 +58,16 @@ def modulo_ventas():
     
     with col1:
         st.markdown("### Escanear Producto")
-        # El formulario con clear_on_submit=True es el secreto para el escáner.
-        # Al disparar la pistola, lee el código y da "Enter" automáticamente.
-        # Streamlit procesa, borra la caja y queda listo para el siguiente disparo.
+        # El formulario con clear_on_submit=True limpia la caja automáticamente al disparar el escáner
         with st.form("escaner_form", clear_on_submit=True):
-            codigo = st.text_input("Código de barras (Usa el escáner aquí):", autofocus=True)
+            # CORREGIDO: Se quitó autofocus=True que causaba el error
+            codigo = st.text_input("Código de barras (Usa el escáner aquí):")
             submitted = st.form_submit_button("Agregar")
             
             if submitted and codigo:
-                # Buscar en ambas tablas
+                # Buscar en Bebidas primero
                 producto = query_db("SELECT nombre, precio FROM bebidas WHERE codigo_barras=?", (codigo,))
+                # Si no está, buscar en Joyería
                 if not producto:
                     producto = query_db("SELECT nombre, precio FROM joyeria WHERE codigo_barras=?", (codigo,))
                 
@@ -93,7 +92,7 @@ def modulo_ventas():
             st.markdown(f"## Total a Cobrar: ${total:.2f}")
             
             if st.button("💰 Procesar Pago (Completar Venta)"):
-                # Aquí iría la lógica para restar del stock
+                # Aquí puedes agregar luego la lógica para descontar del stock físico
                 st.session_state.carrito = []
                 st.success("¡Venta procesada con éxito!")
                 st.rerun()
@@ -126,8 +125,11 @@ def modulo_bebidas():
                     st.error("Error: Este código de barras ya existe.")
 
     st.markdown("### Existencias")
-    df = pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db"))
-    st.dataframe(df, use_container_width=True)
+    try:
+        df = pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db"))
+        st.dataframe(df, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error cargando existencias: {e}")
 
 # ==========================================
 # MÓDULO 3: INVENTARIO DE JOYERÍA
@@ -139,10 +141,10 @@ def modulo_joyeria():
         with st.form("form_joya"):
             col1, col2 = st.columns(2)
             codigo = col1.text_input("Código de Barras / SKU")
-            nombre = col2.text_input("Descripción (Ej. Cadena tejido cartier)")
-            material = col1.selectbox("Material", ["Oro Plata", "Oro 10k", "Oro 14k", "Oro 18k", "Plata 925", "Acero Inoxidable"])
+            nombre = col2.text_input("Descripción (Ej. Cadena oro cartier)")
+            material = col1.selectbox("Material", ["Oro 10k", "Oro 14k", "Oro 18k", "Plata 925", "Acero Inoxidable"])
             peso = col2.number_input("Peso (gramos)", min_value=0.0, format="%.2f")
-            pureza = col1.text_input("Pureza/Detalle adicional")
+            pureza = col1.text_input("Pureza / Detalle adicional")
             precio = col2.number_input("Precio ($)", min_value=0.0, format="%.2f")
             stock = col1.number_input("Stock Inicial", min_value=0)
             
@@ -155,8 +157,11 @@ def modulo_joyeria():
                     st.error("Error: Este código de barras ya existe.")
 
     st.markdown("### Existencias")
-    df = pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db"))
-    st.dataframe(df, use_container_width=True)
+    try:
+        df = pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db"))
+        st.dataframe(df, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error cargando existencias: {e}")
 
 # ==========================================
 # MENÚ DE NAVEGACIÓN
