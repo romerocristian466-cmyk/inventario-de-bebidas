@@ -5,10 +5,10 @@ from datetime import datetime
 import random
 import urllib.parse
 
-st.set_page_config(page_title="Soda Pro - POS", page_icon="🥤", layout="wide")
+st.set_page_config(page_title="Soda Pro", page_icon="🥤", layout="wide")
 
 # ==========================================
-# 1. BASE DE DATOS Y FUNCIONES COMPARTIDAS
+# 1. BASE DE DATOS COMPARTIDA
 # ==========================================
 def init_db():
     conn = sqlite3.connect("inventario.db")
@@ -35,8 +35,7 @@ def query_db(query, params=(), fetch=False):
 def generar_codigo_ean13():
     base = '500' + ''.join([str(random.randint(0, 9)) for _ in range(9)])
     suma = sum(int(d) if i % 2 == 0 else int(d) * 3 for i, d in enumerate(base))
-    checksum = (10 - (suma % 10)) % 10
-    return base + str(checksum)
+    return base + str((10 - (suma % 10)) % 10)
 
 def obtener_catalogo_completo():
     conn = sqlite3.connect("inventario.db")
@@ -47,10 +46,8 @@ def obtener_catalogo_completo():
         UNION ALL
         SELECT codigo_barras, nombre, precio, stock, 'joyeria' as tabla FROM joyeria
     '''
-    try:
-        df = pd.read_sql(query, conn)
-    except:
-        df = pd.DataFrame()
+    try: df = pd.read_sql(query, conn)
+    except: df = pd.DataFrame()
     conn.close()
     return df
 
@@ -70,7 +67,6 @@ def generar_ticket(carrito_df, total, metodo, recibido=None, cambio=None, client
     lineas.append("¡Gracias por su preferencia!")
     return "\n".join(lineas)
 
-# Variables de estado
 if "carrito" not in st.session_state or type(st.session_state.carrito) is dict:
     st.session_state.carrito = []
 if "ticket_texto" not in st.session_state:
@@ -79,23 +75,25 @@ if "ticket_link" not in st.session_state:
     st.session_state.ticket_link = None
 
 # ==========================================
-# 2. NAVEGACIÓN (SIN CONTRASEÑAS)
+# 2. LECTURA DEL "LINK MÁGICO"
 # ==========================================
-st.sidebar.title("Navegación")
-modo = st.sidebar.radio("Ir a:", ["🛒 Punto de Venta (Vendedora)", "⚙️ Administrador"])
+# Leemos si el link de arriba dice ?modulo=admin o ?modulo=venta
+modulo_actual = st.query_params.get("modulo", "venta")
 
 # ==========================================
-# 3. MÓDULO VENDEDORA
+# 3. MÓDULO VENDEDORA (?modulo=venta)
 # ==========================================
-if modo == "🛒 Punto de Venta (Vendedora)":
+if modulo_actual == "venta":
+    # CSS para Ocultar el menú lateral de Streamlit completamente para la vendedora
+    st.markdown("""<style>[data-testid="collapsedControl"] {display: none;}</style>""", unsafe_allow_html=True)
+    
     st.title("🛒 PUNTO DE VENTA")
 
     if st.session_state.ticket_texto:
         st.success("### 🎉 ¡VENTA PROCESADA EXITOSAMENTE!")
         st.markdown(f'<div style="background:#f0f2f6; padding:20px; border-radius:10px; font-family:monospace; white-space:pre-wrap; color:#000; margin-bottom:20px;">{st.session_state.ticket_texto}</div>', unsafe_allow_html=True)
         col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            st.link_button("📲 Enviar por WhatsApp", st.session_state.ticket_link, use_container_width=True)
+        with col_t1: st.link_button("📲 Enviar por WhatsApp", st.session_state.ticket_link, use_container_width=True)
         with col_t2:
             if st.button("🆕 NUEVA VENTA", type="primary", use_container_width=True):
                 st.session_state.ticket_texto = None
@@ -113,13 +111,12 @@ if modo == "🛒 Punto de Venta (Vendedora)":
                     st.session_state.carrito.append({"codigo": codigo, "nombre": prod[0][0], "precio": prod[0][1], "tabla": tabla})
                     encontrado = True
                     break
-            if not encontrado:
-                st.error(f"El código {codigo} no existe en el inventario.")
+            if not encontrado: st.error(f"El código {codigo} no existe en el inventario.")
         st.session_state.escaner_input = ""
 
     st.markdown("### 📷 ESCANEA EL PRODUCTO")
-    st.text_input("Apunta el escáner (o escribe el código y presiona Enter):", key="escaner_input", on_change=procesar_escaneo)
-
+    st.text_input("Apunta el escáner (o presiona Enter):", key="escaner_input", on_change=procesar_escaneo)
+    
     st.markdown("---")
     st.markdown("### 🔎 BÚSQUEDA MANUAL")
     catalogo_df = obtener_catalogo_completo()
@@ -133,7 +130,7 @@ if modo == "🛒 Punto de Venta (Vendedora)":
                 st.session_state.carrito.append({"codigo": fila["codigo_barras"], "nombre": fila["nombre"], "precio": fila["precio"], "tabla": fila["tabla"]})
                 st.rerun()
     else:
-        st.info("El inventario está vacío. Ve al módulo Administrador para cargar productos.")
+        st.info("El inventario está vacío. El administrador debe cargar productos.")
 
     st.markdown("---")
     if st.session_state.carrito:
@@ -148,9 +145,7 @@ if modo == "🛒 Punto de Venta (Vendedora)":
         
         st.markdown("### 💳 MÉTODO DE PAGO")
         metodo_pago = st.radio("Método:", ["Efectivo", "Transferencia", "Fiado"], horizontal=True)
-        
-        puede_cobrar = True
-        cliente, monto_recibido, cambio = "", None, None
+        puede_cobrar, cliente, monto_recibido, cambio = True, "", None, None
         
         if metodo_pago == "Efectivo":
             monto_recibido = st.number_input("💵 Monto recibido:", min_value=0.0, value=float(total), step=1.0)
@@ -158,15 +153,12 @@ if modo == "🛒 Punto de Venta (Vendedora)":
             if monto_recibido < total:
                 st.warning(f"⚠️ Faltan ${abs(cambio):.2f}")
                 puede_cobrar = False
-            else:
-                st.success(f"💰 Cambio a devolver: **${cambio:.2f}**")
+            else: st.success(f"💰 Cambio a devolver: **${cambio:.2f}**")
         elif metodo_pago == "Fiado":
-            cliente = st.text_input("👤 Nombre del cliente (Requerido para Fiado):")
+            cliente = st.text_input("👤 Nombre del cliente:")
             if not cliente.strip():
-                st.warning("⚠️ Escribe el nombre del cliente para dejarlo fiado.")
+                st.warning("⚠️ Escribe el nombre del cliente.")
                 puede_cobrar = False
-            else:
-                st.info(f"📝 Esta venta quedará como deuda de **{cliente}**")
 
         st.markdown("---")
         col1, col2 = st.columns(2)
@@ -193,12 +185,12 @@ if modo == "🛒 Punto de Venta (Vendedora)":
                 st.session_state.carrito = []
                 st.rerun()
 
-
 # ==========================================
-# 4. MÓDULO ADMINISTRADOR
+# 4. MÓDULO ADMINISTRADOR (?modulo=admin)
 # ==========================================
-elif modo == "⚙️ Administrador":
+elif modulo_actual == "admin":
     st.title("🥤 SODA PRO - ADMIN")
+    st.info("💡 Pásale este enlace a la vendedora: **tusitio.streamlit.app/?modulo=venta**")
     tab_general, tab_bebidas, tab_joyeria, tab_reportes, tab_fiados = st.tabs(["📦 GENERAL", "🥤 BEBIDAS", "💎 JOYERÍA", "📈 REPORTES", "👥 FIADOS"])
 
     with tab_general:
@@ -220,43 +212,37 @@ elif modo == "⚙️ Administrador":
                 
         st.markdown("---")
         with st.expander("📥 Carga Masiva (Importar Inventario Anterior)"):
-            st.info("Sube aquí el archivo .csv descargado de tu Google Sheets.")
             archivo_csv = st.file_uploader("Seleccionar archivo CSV", type=["csv"])
-            if archivo_csv:
-                if st.button("Cargar a la Base de Datos", type="primary"):
-                    try:
-                        df_import = pd.read_csv(archivo_csv, dtype=str) 
-                        conn = sqlite3.connect("inventario.db")
-                        c = conn.cursor()
-                        agregados = 0
-                        for _, row in df_import.iterrows():
-                            cod = str(row.get("Codigo", generar_codigo_ean13())).strip()
-                            if cod == "nan" or not cod: cod = generar_codigo_ean13()
-                            nom = str(row.get("Producto", "Sin nombre")).strip()
-                            if nom == "nan": nom = "Sin nombre"
-                            uni = str(row.get("Unidad", "Unidades")).strip()
-                            if uni == "nan": uni = "Unidades"
-                            def limpiar_numero(val):
-                                if pd.isna(val) or val == "nan" or not str(val).strip(): return 0.0
-                                try: return float(str(val).replace("$", "").replace(",", ".").strip())
-                                except: return 0.0
-                            cost = limpiar_numero(row.get("Costo", 0))
-                            prec = limpiar_numero(row.get("Precio_Venta", 0))
-                            stk = limpiar_numero(row.get("Stock", 0))
-                            try:
-                                c.execute("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", (cod, nom, uni, cost, prec, stk))
-                                agregados += 1
-                            except sqlite3.IntegrityError: pass 
-                        conn.commit()
-                        conn.close()
-                        st.success(f"✅ Se cargaron {agregados} productos exitosamente.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al leer el archivo: {e}")
+            if archivo_csv and st.button("Cargar a la Base de Datos", type="primary"):
+                try:
+                    df_import = pd.read_csv(archivo_csv, dtype=str) 
+                    conn = sqlite3.connect("inventario.db")
+                    c = conn.cursor()
+                    agregados = 0
+                    for _, row in df_import.iterrows():
+                        cod = str(row.get("Codigo", generar_codigo_ean13())).strip()
+                        if cod == "nan" or not cod: cod = generar_codigo_ean13()
+                        nom = str(row.get("Producto", "Sin nombre")).strip()
+                        uni = str(row.get("Unidad", "Unidades")).strip()
+                        def limpiar_numero(val):
+                            if pd.isna(val) or val == "nan": return 0.0
+                            try: return float(str(val).replace("$", "").replace(",", ".").strip())
+                            except: return 0.0
+                        cost = limpiar_numero(row.get("Costo", 0))
+                        prec = limpiar_numero(row.get("Precio_Venta", 0))
+                        stk = limpiar_numero(row.get("Stock", 0))
+                        try:
+                            c.execute("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", (cod, nom, uni, cost, prec, stk))
+                            agregados += 1
+                        except: pass 
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ Se cargaron {agregados} productos.")
+                    st.rerun()
+                except Exception as e: st.error(f"Error: {e}")
 
         st.markdown("---")
-        try:
-            st.dataframe(pd.read_sql("SELECT * FROM inventario_general", sqlite3.connect("inventario.db")), use_container_width=True)
+        try: st.dataframe(pd.read_sql("SELECT * FROM inventario_general", sqlite3.connect("inventario.db")), use_container_width=True)
         except: pass
 
     with tab_bebidas:
@@ -277,8 +263,7 @@ elif modo == "⚙️ Administrador":
                     query_db("INSERT INTO bebidas VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, marca, ml, fecha, costo, precio, stock))
                     st.success("Bebida guardada.")
                 except: st.error("El código ya existe.")
-        try:
-            st.dataframe(pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db")), use_container_width=True)
+        try: st.dataframe(pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db")), use_container_width=True)
         except: pass
 
     with tab_joyeria:
@@ -287,7 +272,7 @@ elif modo == "⚙️ Administrador":
             col1, col2 = st.columns(2)
             codigo = col1.text_input("Código / SKU")
             nombre = col2.text_input("Descripción")
-            material = col1.selectbox("Material", ["Oro 10k", "Oro 14k", "Plata 925", "Acero"])
+            material = col1.selectbox("Material", ["Oro", "Plata", "Acero"])
             peso = col2.number_input("Peso (g)", min_value=0.0)
             pureza = col1.text_input("Pureza/Detalle")
             costo = col2.number_input("Costo", min_value=0.0)
@@ -299,8 +284,7 @@ elif modo == "⚙️ Administrador":
                     query_db("INSERT INTO joyeria VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, material, peso, pureza, costo, precio, stock))
                     st.success("Joya guardada.")
                 except: st.error("El código ya existe.")
-        try:
-            st.dataframe(pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db")), use_container_width=True)
+        try: st.dataframe(pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db")), use_container_width=True)
         except: pass
 
     with tab_reportes:
@@ -309,8 +293,7 @@ elif modo == "⚙️ Administrador":
             df_v = pd.read_sql("SELECT * FROM ventas_historial ORDER BY fecha DESC, hora DESC", sqlite3.connect("inventario.db"))
             st.metric("Total Histórico", f"${df_v['total'].sum():.2f}")
             st.dataframe(df_v, use_container_width=True)
-        except:
-            st.info("Aún no hay ventas registradas.")
+        except: pass
 
     with tab_fiados:
         st.subheader("👥 Clientes con Fiado")
@@ -323,5 +306,4 @@ elif modo == "⚙️ Administrador":
                     query_db("UPDATE fiados SET estado='Pagado' WHERE cliente=?", (cliente_pagar,))
                     st.success("Deuda liquidada.")
                     st.rerun()
-        except:
-            st.info("Aún no hay fiados pendientes.")
+        except: pass
