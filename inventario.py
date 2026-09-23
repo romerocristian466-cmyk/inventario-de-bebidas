@@ -65,7 +65,7 @@ with tab_general:
             
     st.markdown("---")
     
-    # IMPORTADOR DE INVENTARIO VIEJO
+    # IMPORTADOR DE INVENTARIO VIEJO CORREGIDO (Maneja comas y $)
     with st.expander("📥 Carga Masiva (Importar Inventario Anterior)"):
         st.info("Sube aquí el archivo .csv descargado de tu Google Sheets.")
         archivo_csv = st.file_uploader("Seleccionar archivo CSV", type=["csv"])
@@ -73,7 +73,7 @@ with tab_general:
         if archivo_csv:
             if st.button("Cargar a la Base de Datos", type="primary"):
                 try:
-                    df_import = pd.read_csv(archivo_csv)
+                    df_import = pd.read_csv(archivo_csv, dtype=str) 
                     conn = sqlite3.connect("inventario.db")
                     c = conn.cursor()
                     agregados = 0
@@ -83,11 +83,24 @@ with tab_general:
                         if cod == "nan" or not cod: 
                             cod = generar_codigo_ean13()
                             
-                        nom = str(row.get("Producto", "Sin nombre"))
-                        uni = str(row.get("Unidad", "Unidades"))
-                        cost = float(row.get("Costo", 0.0))
-                        prec = float(row.get("Precio_Venta", 0.0))
-                        stk = float(row.get("Stock", 0.0))
+                        nom = str(row.get("Producto", "Sin nombre")).strip()
+                        if nom == "nan": nom = "Sin nombre"
+                        
+                        uni = str(row.get("Unidad", "Unidades")).strip()
+                        if uni == "nan": uni = "Unidades"
+                        
+                        # Limpiador de números rebeldes
+                        def limpiar_numero(val):
+                            if pd.isna(val) or val == "nan" or not str(val).strip(): 
+                                return 0.0
+                            try:
+                                return float(str(val).replace("$", "").replace(",", ".").strip())
+                            except:
+                                return 0.0
+                                
+                        cost = limpiar_numero(row.get("Costo", 0))
+                        prec = limpiar_numero(row.get("Precio_Venta", 0))
+                        stk = limpiar_numero(row.get("Stock", 0))
                         
                         try:
                             c.execute("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", 
