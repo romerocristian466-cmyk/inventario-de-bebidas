@@ -1,177 +1,125 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+from datetime import datetime
+import random
+
+st.set_page_config(page_title="Soda Pro - Admin", page_icon="🥤", layout="wide")
 
 # ==========================================
-# CONFIGURACIÓN Y BASE DE DATOS
+# BASE DE DATOS LOCAL
 # ==========================================
-st.set_page_config(page_title="Sistema POS e Inventario", layout="wide")
-
 def init_db():
     conn = sqlite3.connect("inventario.db")
     c = conn.cursor()
-    # Tabla Bebidas
+    c.execute('''CREATE TABLE IF NOT EXISTS inventario_general (
+        codigo_barras TEXT PRIMARY KEY, nombre TEXT NOT NULL, unidad TEXT, costo REAL, precio REAL NOT NULL, stock REAL NOT NULL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS bebidas (
-        codigo_barras TEXT PRIMARY KEY,
-        nombre TEXT NOT NULL,
-        marca TEXT,
-        mililitros INTEGER,
-        fecha_caducidad DATE,
-        precio REAL NOT NULL,
-        stock INTEGER NOT NULL
-    )''')
-    # Tabla Joyería
+        codigo_barras TEXT PRIMARY KEY, nombre TEXT NOT NULL, marca TEXT, mililitros INTEGER, fecha_caducidad DATE, costo REAL, precio REAL NOT NULL, stock REAL NOT NULL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS joyeria (
-        codigo_barras TEXT PRIMARY KEY,
-        nombre TEXT NOT NULL,
-        material TEXT,
-        peso_gramos REAL,
-        pureza TEXT,
-        precio REAL NOT NULL,
-        stock INTEGER NOT NULL
-    )''')
+        codigo_barras TEXT PRIMARY KEY, nombre TEXT NOT NULL, material TEXT, peso_gramos REAL, pureza TEXT, costo REAL, precio REAL NOT NULL, stock REAL NOT NULL)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS ventas_historial (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, fecha DATE, hora TIME, codigo TEXT, producto TEXT, cantidad REAL, precio_unit REAL, total REAL, metodo_pago TEXT, cliente TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS fiados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, fecha DATE, hora TIME, cliente TEXT NOT NULL, detalle TEXT, total REAL NOT NULL, estado TEXT DEFAULT 'Pendiente')''')
     conn.commit()
     conn.close()
 
 init_db()
 
-def query_db(query, params=()):
+def query_db(query, params=(), fetch=False):
     conn = sqlite3.connect("inventario.db")
     c = conn.cursor()
     c.execute(query, params)
-    result = c.fetchall()
+    res = c.fetchall() if fetch else None
     conn.commit()
     conn.close()
-    return result
+    return res
 
-# Inicializar el carrito en sesión
-if "carrito" not in st.session_state:
-    st.session_state.carrito = []
+def generar_codigo_ean13():
+    base = '500' + ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    suma = sum(int(d) if i % 2 == 0 else int(d) * 3 for i, d in enumerate(base))
+    checksum = (10 - (suma % 10)) % 10
+    return base + str(checksum)
 
-# ==========================================
-# MÓDULO 1: PUNTO DE VENTA (VENDEDORA)
-# ==========================================
-def modulo_ventas():
-    st.title("🛒 Punto de Venta")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("### Escanear Producto")
-        # El formulario con clear_on_submit=True limpia la caja automáticamente al disparar el escáner
-        with st.form("escaner_form", clear_on_submit=True):
-            # CORREGIDO: Se quitó autofocus=True que causaba el error
-            codigo = st.text_input("Código de barras (Usa el escáner aquí):")
-            submitted = st.form_submit_button("Agregar")
-            
-            if submitted and codigo:
-                # Buscar en Bebidas primero
-                producto = query_db("SELECT nombre, precio FROM bebidas WHERE codigo_barras=?", (codigo,))
-                # Si no está, buscar en Joyería
-                if not producto:
-                    producto = query_db("SELECT nombre, precio FROM joyeria WHERE codigo_barras=?", (codigo,))
-                
-                if producto:
-                    st.session_state.carrito.append({
-                        "codigo": codigo,
-                        "nombre": producto[0][0],
-                        "precio": producto[0][1]
-                    })
-                    st.rerun()
-                else:
-                    st.error("Producto no encontrado en el inventario.")
+st.title("🥤 SODA PRO - ADMIN")
+tab_general, tab_bebidas, tab_joyeria, tab_reportes, tab_fiados = st.tabs(["📦 GENERAL", "🥤 BEBIDAS", "💎 JOYERÍA", "📈 REPORTES", "👥 FIADOS"])
 
-    with col2:
-        st.markdown("### Detalle de la Venta")
-        if st.session_state.carrito:
-            df_carrito = pd.DataFrame(st.session_state.carrito)
-            df_carrito.index = df_carrito.index + 1
-            st.dataframe(df_carrito, use_container_width=True)
-            
-            total = df_carrito['precio'].sum()
-            st.markdown(f"## Total a Cobrar: ${total:.2f}")
-            
-            if st.button("💰 Procesar Pago (Completar Venta)"):
-                # Aquí puedes agregar luego la lógica para descontar del stock físico
-                st.session_state.carrito = []
-                st.success("¡Venta procesada con éxito!")
-                st.rerun()
-        else:
-            st.info("El carrito está vacío. Escanea un producto para comenzar.")
+# --- TAB GENERAL ---
+with tab_general:
+    st.subheader("📦 Inventario General")
+    with st.form("form_general", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        codigo = col1.text_input("Código (Vacio=Auto)")
+        nombre = col2.text_input("Nombre")
+        unidad = col1.selectbox("Unidad", ["Unidades", "Libras", "Kilos", "Paquete"])
+        costo = col1.number_input("Costo", min_value=0.0)
+        precio = col2.number_input("Precio", min_value=0.0)
+        stock = col2.number_input("Stock Inicial", min_value=0.0)
+        if st.form_submit_button("Agregar Producto"):
+            cod = codigo.strip() or generar_codigo_ean13()
+            try:
+                query_db("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", (cod, nombre, unidad, costo, precio, stock))
+                st.success(f"Guardado. Código: {cod}")
+            except: st.error("El código ya existe.")
+    st.dataframe(pd.read_sql("SELECT * FROM inventario_general", sqlite3.connect("inventario.db")), use_container_width=True)
 
-# ==========================================
-# MÓDULO 2: INVENTARIO DE BEBIDAS
-# ==========================================
-def modulo_bebidas():
-    st.title("🥤 Inventario de Bebidas")
-    
-    with st.expander("➕ Registrar Nueva Bebida", expanded=False):
-        with st.form("form_bebida"):
-            col1, col2 = st.columns(2)
-            codigo = col1.text_input("Código de Barras")
-            nombre = col2.text_input("Nombre del Producto")
-            marca = col1.text_input("Marca")
-            ml = col2.number_input("Volumen (ml)", min_value=0)
-            fecha = col1.date_input("Fecha de Caducidad")
-            precio = col2.number_input("Precio ($)", min_value=0.0, format="%.2f")
-            stock = col1.number_input("Stock Inicial", min_value=0)
-            
-            if st.form_submit_button("Guardar Bebida"):
-                try:
-                    query_db("INSERT INTO bebidas VALUES (?,?,?,?,?,?,?)", 
-                             (codigo, nombre, marca, ml, fecha, precio, stock))
-                    st.success("Bebida registrada correctamente.")
-                except sqlite3.IntegrityError:
-                    st.error("Error: Este código de barras ya existe.")
+# --- TAB BEBIDAS ---
+with tab_bebidas:
+    st.subheader("🥤 Inventario de Bebidas")
+    with st.form("form_bebidas", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        codigo = col1.text_input("Código de Barras")
+        nombre = col2.text_input("Nombre Bebida")
+        marca = col1.text_input("Marca")
+        ml = col2.number_input("Mililitros", min_value=0)
+        fecha = col1.date_input("Caducidad")
+        costo = col2.number_input("Costo", min_value=0.0)
+        precio = col1.number_input("Precio", min_value=0.0)
+        stock = col2.number_input("Stock", min_value=0.0)
+        if st.form_submit_button("Agregar Bebida"):
+            cod = codigo.strip() or generar_codigo_ean13()
+            try:
+                query_db("INSERT INTO bebidas VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, marca, ml, fecha, costo, precio, stock))
+                st.success("Bebida guardada.")
+            except: st.error("El código ya existe.")
+    st.dataframe(pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db")), use_container_width=True)
 
-    st.markdown("### Existencias")
-    try:
-        df = pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db"))
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"Error cargando existencias: {e}")
+# --- TAB JOYERÍA ---
+with tab_joyeria:
+    st.subheader("💎 Inventario de Joyería")
+    with st.form("form_joya", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        codigo = col1.text_input("Código / SKU")
+        nombre = col2.text_input("Descripción")
+        material = col1.selectbox("Material", ["Oro 10k", "Oro 14k", "Plata 925", "Acero"])
+        peso = col2.number_input("Peso (g)", min_value=0.0)
+        pureza = col1.text_input("Pureza/Detalle")
+        costo = col2.number_input("Costo", min_value=0.0)
+        precio = col1.number_input("Precio", min_value=0.0)
+        stock = col2.number_input("Stock", min_value=0.0)
+        if st.form_submit_button("Agregar Joya"):
+            cod = codigo.strip() or generar_codigo_ean13()
+            try:
+                query_db("INSERT INTO joyeria VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, material, peso, pureza, costo, precio, stock))
+                st.success("Joya guardada.")
+            except: st.error("El código ya existe.")
+    st.dataframe(pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db")), use_container_width=True)
 
-# ==========================================
-# MÓDULO 3: INVENTARIO DE JOYERÍA
-# ==========================================
-def modulo_joyeria():
-    st.title("💎 Inventario de Joyería")
-    
-    with st.expander("➕ Registrar Nueva Joya", expanded=False):
-        with st.form("form_joya"):
-            col1, col2 = st.columns(2)
-            codigo = col1.text_input("Código de Barras / SKU")
-            nombre = col2.text_input("Descripción (Ej. Cadena oro cartier)")
-            material = col1.selectbox("Material", ["Oro 10k", "Oro 14k", "Oro 18k", "Plata 925", "Acero Inoxidable"])
-            peso = col2.number_input("Peso (gramos)", min_value=0.0, format="%.2f")
-            pureza = col1.text_input("Pureza / Detalle adicional")
-            precio = col2.number_input("Precio ($)", min_value=0.0, format="%.2f")
-            stock = col1.number_input("Stock Inicial", min_value=0)
-            
-            if st.form_submit_button("Guardar Joya"):
-                try:
-                    query_db("INSERT INTO joyeria VALUES (?,?,?,?,?,?,?)", 
-                             (codigo, nombre, material, peso, pureza, precio, stock))
-                    st.success("Joya registrada correctamente.")
-                except sqlite3.IntegrityError:
-                    st.error("Error: Este código de barras ya existe.")
+# --- REPORTES Y FIADOS ---
+with tab_reportes:
+    st.subheader("📈 Ventas Registradas")
+    df_v = pd.read_sql("SELECT * FROM ventas_historial ORDER BY fecha DESC, hora DESC", sqlite3.connect("inventario.db"))
+    st.metric("Total Histórico", f"${df_v['total'].sum():.2f}")
+    st.dataframe(df_v, use_container_width=True)
 
-    st.markdown("### Existencias")
-    try:
-        df = pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db"))
-        st.dataframe(df, use_container_width=True)
-    except Exception as e:
-        st.error(f"Error cargando existencias: {e}")
-
-# ==========================================
-# MENÚ DE NAVEGACIÓN
-# ==========================================
-st.sidebar.title("Menú Principal")
-menu = st.sidebar.radio("Ir a:", ["Ventas (Escáner)", "Inventario Bebidas", "Inventario Joyería"])
-
-if menu == "Ventas (Escáner)":
-    modulo_ventas()
-elif menu == "Inventario Bebidas":
-    modulo_bebidas()
-elif menu == "Inventario Joyería":
-    modulo_joyeria()
+with tab_fiados:
+    st.subheader("👥 Clientes con Fiado")
+    df_f = pd.read_sql("SELECT * FROM fiados WHERE estado='Pendiente'", sqlite3.connect("inventario.db"))
+    st.dataframe(df_f, use_container_width=True)
+    if not df_f.empty:
+        cliente_pagar = st.selectbox("Liquidar deuda de:", df_f['cliente'].unique())
+        if st.button("Marcar como Pagado"):
+            query_db("UPDATE fiados SET estado='Pagado' WHERE cliente=?", (cliente_pagar,))
+            st.success("Deuda liquidada.")
+            st.rerun()
