@@ -1,142 +1,87 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
-import streamlit.components.v1 as components
+import pandas as pd
 from datetime import datetime
 
-# Función auxiliar para conectar a la DB
-def ejecutar_query(query, params=(), fetch=False):
-    conn = sqlite3.connect("inventario.db") # Asegúrate de usar la ruta correcta a tu DB
+st.set_page_config(page_title="Punto de Venta", page_icon="🛒", layout="centered")
+
+def query_db(query, params=(), fetch=False):
+    conn = sqlite3.connect("inventario.db")
     c = conn.cursor()
     c.execute(query, params)
-    if fetch:
-        result = c.fetchall()
-    else:
-        result = None
+    res = c.fetchall() if fetch else None
     conn.commit()
     conn.close()
-    return result
+    return res
 
-def page_punto_de_venta():
-    st.title("🛒 Punto de Venta Rápido")
+if "carrito" not in st.session_state or type(st.session_state.carrito) is dict:
+    st.session_state.carrito = []
 
-    # 1. Inicializar el carrito en la sesión si no existe
-    if "carrito" not in st.session_state:
-        st.session_state.carrito = {} # Usamos diccionario para agrupar cantidades rápido por código
+def procesar_escaneo():
+    codigo = st.session_state.escaner_input.strip()
+    if codigo:
+        # Buscar en las tres tablas
+        tablas = ["inventario_general", "bebidas", "joyeria"]
+        encontrado = False
+        for tabla in tablas:
+            prod = query_db(f"SELECT nombre, precio, stock FROM {tabla} WHERE codigo_barras=?", (codigo,), fetch=True)
+            if prod:
+                st.session_state.carrito.append({
+                    "codigo": codigo, "nombre": prod[0][0], "precio": prod[0][1], "tabla": tabla
+                })
+                encontrado = True
+                break
+        if not encontrado:
+            st.error("Producto no encontrado")
+    # Limpiar caja de texto automáticamente
+    st.session_state.escaner_input = ""
 
-    # 2. HACK PRO: Inyectar JavaScript para forzar el Autofocus en el campo del escáner
-    components.html(
-        """
-        <script>
-        const doc = window.parent.document;
-        // Busca el primer input de texto en la pantalla y lo enfoca continuamente
-        function setFocus() {
-            const input = doc.querySelector('input[aria-label="Código de Barras (Escáner)"]');
-            if(input) { input.focus(); }
-        }
-        setInterval(setFocus, 1000); // Re-enfoca cada segundo por si la vendedora da clic fuera
-        </script>
-        """,
-        height=0
-    )
+st.title("🛒 PUNTO DE VENTA")
 
-    col_escaner, col_carrito = st.columns([1, 2])
+st.markdown("### 📷 ESCANEA EL PRODUCTO")
+# El evento on_change hace que al escanear, se agregue directo al carrito
+st.text_input("Apunta el escáner:", key="escaner_input", on_change=procesar_escaneo)
 
-    with col_escaner:
-        st.markdown("### 🔍 Lector")
-        st.info("El cursor está fijado automáticamente. Solo dispara el escáner.")
+if st.session_state.carrito:
+    df_carrito = pd.DataFrame(st.session_state.carrito)
+    
+    # Agrupar items repetidos
+    carrito_agrupado = df_carrito.groupby(["codigo", "nombre", "precio", "tabla"]).size().reset_index(name='cantidad')
+    carrito_agrupado['subtotal'] = carrito_agrupado['cantidad'] * carrito_agrupado['precio']
+    
+    st.markdown("### 🛒 CARRITO")
+    st.dataframe(carrito_agrupado[["nombre", "cantidad", "subtotal"]], use_container_width=True)
+    
+    total = carrito_agrupado['subtotal'].sum()
+    st.markdown(f"## Total a Cobrar: ${total:.2f}")
+    
+    metodo_pago = st.radio("Método:", ["Efectivo", "Transferencia", "Fiado"], horizontal=True)
+    cliente = st.text_input("Nombre del cliente (Solo para Fiado):") if metodo_pago == "Fiado" else ""
+    
+    col1, col2 = st.columns(2)
+    if col1.button("❌ CANCELAR", use_container_width=True):
+        st.session_state.carrito = []
+        st.rerun()
         
-        # Formulario con clear_on_submit=True para lectura a ráfagas
-        with st.form("escaner_form", clear_on_submit=True):
-            codigo_ingresado = st.text_input("Código de Barras (Escáner)", label_visibility="collapsed", placeholder="Dispara el escáner aquí...")
-            btn_agregar = st.form_submit_button("Agregar (Enter)", use_container_width=True)
-
-            if btn_agregar and codigo_ingresado:
-                codigo = codigo_ingresado.strip()
-                
-                # Buscar en Bebidas primero
-                producto = ejecutar_query("SELECT nombre, precio, stock FROM bebidas WHERE codigo_barras=?", (codigo,), fetch=True)
-                tabla_origen = "bebidas"
-                
-                # Si no está en Bebidas, buscar en Joyería
-                if not producto:
-                    producto = ejecutar_query("SELECT nombre, precio, stock FROM joyeria WHERE codigo_barras=?", (codigo,), fetch=True)
-                    tabla_origen = "joyeria"
-
-                if producto:
-                    nombre, precio, stock_disponible = producto[0]
-                    
-                    # Calcular cuántos hay ya en el carrito para no exceder el stock físico
-                    cantidad_en_carrito = st.session_state.carrito.get(codigo, {}).get("cantidad", 0)
-                    
-                    if cantidad_en_carrito < stock_disponible:
-                        if codigo in st.session_state.carrito:
-                            st.session_state.carrito[codigo]["cantidad"] += 1
-                            st.session_state.carrito[codigo]["subtotal"] = st.session_state.carrito[codigo]["cantidad"] * precio
-                        else:
-                            st.session_state.carrito[codigo] = {
-                                "nombre": nombre,
-                                "precio": precio,
-                                "cantidad": 1,
-                                "subtotal": precio,
-                                "origen": tabla_origen
-                            }
-                        st.rerun()
-                    else:
-                        st.error(f"¡Stock insuficiente! Solo quedan {stock_disponible} unidades de {nombre}.")
-                else:
-                    st.error("❌ Producto no encontrado.")
-
-    with col_carrito:
-        st.markdown("### 🛍️ Detalle de Venta")
-        
-        if st.session_state.carrito:
-            # Convertir el diccionario a DataFrame para mostrarlo bonito
-            df_carrito = pd.DataFrame(st.session_state.carrito.values())
-            # Reordenar y renombrar columnas para la vendedora
-            df_mostrar = df_carrito[["nombre", "precio", "cantidad", "subtotal"]]
-            df_mostrar.columns = ["Producto", "Precio Unitario", "Cantidad", "Subtotal"]
-            
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
-            
-            total_pagar = df_carrito["subtotal"].sum()
-            
-            st.markdown(f"<h2 style='text-align: right; color: #10b981;'>Total a Cobrar: ${total_pagar:.2f}</h2>", unsafe_allow_html=True)
-            
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                if st.button("🗑️ Vaciar Carrito", use_container_width=True):
-                    st.session_state.carrito = {}
-                    st.rerun()
-                    
-            with col_btn2:
-                if st.button("💰 PROCESAR PAGO", type="primary", use_container_width=True):
-                    # Iniciar transacción segura para descontar stock
-                    conn = sqlite3.connect("inventario.db")
-                    c = conn.cursor()
-                    try:
-                        for cod, data in st.session_state.carrito.items():
-                            tabla = data["origen"]
-                            cantidad_vendida = data["cantidad"]
-                            
-                            # Actualizar stock dinámicamente según la tabla origen
-                            c.execute(f"UPDATE {tabla} SET stock = stock - ? WHERE codigo_barras = ?", 
-                                      (cantidad_vendida, cod))
-                        
-                        # Aquí podrías insertar la transacción en una tabla 'ventas_historial'
-                        # c.execute("INSERT INTO ventas (total, fecha) VALUES (?, ?)", (total_pagar, datetime.now()))
-                        
-                        conn.commit()
-                        st.session_state.carrito = {} # Limpiar carrito tras pago exitoso
-                        st.success("✅ Venta procesada y stock descontado.")
-                        # Usar time.sleep(1.5) aquí si quieres que vea el mensaje antes de recargar
-                        st.rerun()
-                        
-                    except Exception as e:
-                        conn.rollback()
-                        st.error(f"Error crítico al procesar: {e}")
-                    finally:
-                        conn.close()
+    if col2.button("✅ COBRAR", type="primary", use_container_width=True):
+        if metodo_pago == "Fiado" and not cliente:
+            st.error("Ingresa el nombre del cliente.")
         else:
-            st.info("El carrito está vacío. Escanea el primer producto.")
+            ahora = datetime.now()
+            detalle_fiado = ""
+            for _, row in carrito_agrupado.iterrows():
+                # Descontar stock físico
+                query_db(f"UPDATE {row['tabla']} SET stock = stock - ? WHERE codigo_barras=?", (row['cantidad'], row['codigo']))
+                # Registrar historial
+                query_db("INSERT INTO ventas_historial (fecha, hora, codigo, producto, cantidad, precio_unit, total, metodo_pago, cliente) VALUES (?,?,?,?,?,?,?,?,?)",
+                         (ahora.date(), ahora.strftime("%H:%M:%S"), row['codigo'], row['nombre'], row['cantidad'], row['precio'], row['subtotal'], metodo_pago, cliente))
+                detalle_fiado += f"{row['nombre']} x{row['cantidad']}, "
+            
+            if metodo_pago == "Fiado":
+                query_db("INSERT INTO fiados (fecha, hora, cliente, detalle, total) VALUES (?,?,?,?,?)",
+                         (ahora.date(), ahora.strftime("%H:%M:%S"), cliente, detalle_fiado, total))
+            
+            st.session_state.carrito = []
+            st.success("✅ Venta completada!")
+else:
+    st.info("El carrito está vacío.")
