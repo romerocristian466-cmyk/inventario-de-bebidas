@@ -60,31 +60,36 @@ def procesar_escaneo():
 # ==========================================
 st.title("🛒 PUNTO DE VENTA")
 
-# 1. BÚSQUEDA (ESCÁNER Y MANUAL)
+# 1. ESCÁNER RÁPIDO
 st.markdown("### 📷 ESCANEA EL PRODUCTO")
 st.text_input("Apunta el escáner (o escribe el código y presiona Enter):", key="escaner_input", on_change=procesar_escaneo)
 
+st.markdown("---")
+
+# 2. BÚSQUEDA MANUAL POR NOMBRE (Visible en todo momento)
+st.markdown("### 🔎 BÚSQUEDA MANUAL")
 catalogo_df = obtener_catalogo_completo()
 
 if not catalogo_df.empty:
-    with st.expander("🔎 ¿No lee el código? Busca el producto manual aquí"):
-        opciones = ["--- Selecciona un producto ---"] + catalogo_df["nombre"].tolist()
-        seleccion = st.selectbox("Producto:", opciones)
-        
-        if seleccion != "--- Selecciona un producto ---":
-            if st.button("➕ Agregar al carrito"):
-                fila = catalogo_df[catalogo_df["nombre"] == seleccion].iloc[0]
-                st.session_state.carrito.append({
-                    "codigo": fila["codigo_barras"], 
-                    "nombre": fila["nombre"], 
-                    "precio": fila["precio"], 
-                    "tabla": fila["tabla"]
-                })
-                st.rerun()
+    opciones = ["--- Selecciona un producto ---"] + catalogo_df["nombre"].tolist()
+    seleccion = st.selectbox("Busca por nombre si no tienes el código o el escáner falló:", opciones)
+    
+    if seleccion != "--- Selecciona un producto ---":
+        if st.button("➕ Agregar al carrito", type="secondary", use_container_width=True):
+            fila = catalogo_df[catalogo_df["nombre"] == seleccion].iloc[0]
+            st.session_state.carrito.append({
+                "codigo": fila["codigo_barras"], 
+                "nombre": fila["nombre"], 
+                "precio": fila["precio"], 
+                "tabla": fila["tabla"]
+            })
+            st.rerun()
+else:
+    st.info("El inventario está vacío. Pídele al administrador que registre productos.")
 
 st.markdown("---")
 
-# 2. CARRITO Y COBRO
+# 3. CARRITO Y COBRO (Solo aparece si hay productos)
 if st.session_state.carrito:
     df_carrito = pd.DataFrame(st.session_state.carrito)
     
@@ -103,7 +108,6 @@ if st.session_state.carrito:
     puede_cobrar = True
     cliente = ""
     
-    # Lógica de Contado (Efectivo) y Fiado
     if metodo_pago == "Efectivo":
         monto_recibido = st.number_input("💵 Monto recibido:", min_value=0.0, value=float(total), step=1.0)
         cambio = monto_recibido - total
@@ -123,7 +127,7 @@ if st.session_state.carrito:
 
     st.markdown("---")
     
-    # 3. BOTONES DE ACCIÓN
+    # BOTONES DE ACCIÓN
     col1, col2 = st.columns(2)
     with col1:
         if st.button("❌ CANCELAR", use_container_width=True):
@@ -136,14 +140,11 @@ if st.session_state.carrito:
             detalle_fiado = ""
             
             for _, row in carrito_agrupado.iterrows():
-                # Descontar stock
                 query_db(f"UPDATE {row['tabla']} SET stock = stock - ? WHERE codigo_barras=?", (row['cantidad'], row['codigo']))
-                # Registrar historial
                 query_db("INSERT INTO ventas_historial (fecha, hora, codigo, producto, cantidad, precio_unit, total, metodo_pago, cliente) VALUES (?,?,?,?,?,?,?,?,?)",
                          (ahora.date(), ahora.strftime("%H:%M:%S"), row['codigo'], row['nombre'], row['cantidad'], row['precio'], row['subtotal'], metodo_pago, cliente))
                 detalle_fiado += f"{row['nombre']} x{row['cantidad']}, "
             
-            # Registrar Fiado si aplica
             if metodo_pago == "Fiado":
                 query_db("INSERT INTO fiados (fecha, hora, cliente, detalle, total) VALUES (?,?,?,?,?)",
                          (ahora.date(), ahora.strftime("%H:%M:%S"), cliente, detalle_fiado, total))
@@ -151,5 +152,3 @@ if st.session_state.carrito:
             st.session_state.carrito = []
             st.success(f"✅ Venta procesada exitosamente por ${total:.2f}")
             st.rerun()
-else:
-    st.info("🛒 El carrito está vacío. Escanea o busca productos para empezar.")
