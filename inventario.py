@@ -62,7 +62,51 @@ with tab_general:
                 query_db("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", (cod, nombre, unidad, costo, precio, stock))
                 st.success(f"Guardado. Código: {cod}")
             except: st.error("El código ya existe.")
-    st.dataframe(pd.read_sql("SELECT * FROM inventario_general", sqlite3.connect("inventario.db")), use_container_width=True)
+            
+    st.markdown("---")
+    
+    # IMPORTADOR DE INVENTARIO VIEJO
+    with st.expander("📥 Carga Masiva (Importar Inventario Anterior)"):
+        st.info("Sube aquí el archivo .csv descargado de tu Google Sheets.")
+        archivo_csv = st.file_uploader("Seleccionar archivo CSV", type=["csv"])
+        
+        if archivo_csv:
+            if st.button("Cargar a la Base de Datos", type="primary"):
+                try:
+                    df_import = pd.read_csv(archivo_csv)
+                    conn = sqlite3.connect("inventario.db")
+                    c = conn.cursor()
+                    agregados = 0
+                    
+                    for _, row in df_import.iterrows():
+                        cod = str(row.get("Codigo", generar_codigo_ean13())).strip()
+                        if cod == "nan" or not cod: 
+                            cod = generar_codigo_ean13()
+                            
+                        nom = str(row.get("Producto", "Sin nombre"))
+                        uni = str(row.get("Unidad", "Unidades"))
+                        cost = float(row.get("Costo", 0.0))
+                        prec = float(row.get("Precio_Venta", 0.0))
+                        stk = float(row.get("Stock", 0.0))
+                        
+                        try:
+                            c.execute("INSERT INTO inventario_general VALUES (?,?,?,?,?,?)", 
+                                      (cod, nom, uni, cost, prec, stk))
+                            agregados += 1
+                        except sqlite3.IntegrityError:
+                            pass 
+                            
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ Se cargaron {agregados} productos exitosamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al leer el archivo: {e}")
+
+    st.markdown("---")
+    try:
+        st.dataframe(pd.read_sql("SELECT * FROM inventario_general", sqlite3.connect("inventario.db")), use_container_width=True)
+    except: pass
 
 # --- TAB BEBIDAS ---
 with tab_bebidas:
@@ -83,7 +127,9 @@ with tab_bebidas:
                 query_db("INSERT INTO bebidas VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, marca, ml, fecha, costo, precio, stock))
                 st.success("Bebida guardada.")
             except: st.error("El código ya existe.")
-    st.dataframe(pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db")), use_container_width=True)
+    try:
+        st.dataframe(pd.read_sql("SELECT * FROM bebidas", sqlite3.connect("inventario.db")), use_container_width=True)
+    except: pass
 
 # --- TAB JOYERÍA ---
 with tab_joyeria:
@@ -104,22 +150,30 @@ with tab_joyeria:
                 query_db("INSERT INTO joyeria VALUES (?,?,?,?,?,?,?,?)", (cod, nombre, material, peso, pureza, costo, precio, stock))
                 st.success("Joya guardada.")
             except: st.error("El código ya existe.")
-    st.dataframe(pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db")), use_container_width=True)
+    try:
+        st.dataframe(pd.read_sql("SELECT * FROM joyeria", sqlite3.connect("inventario.db")), use_container_width=True)
+    except: pass
 
 # --- REPORTES Y FIADOS ---
 with tab_reportes:
     st.subheader("📈 Ventas Registradas")
-    df_v = pd.read_sql("SELECT * FROM ventas_historial ORDER BY fecha DESC, hora DESC", sqlite3.connect("inventario.db"))
-    st.metric("Total Histórico", f"${df_v['total'].sum():.2f}")
-    st.dataframe(df_v, use_container_width=True)
+    try:
+        df_v = pd.read_sql("SELECT * FROM ventas_historial ORDER BY fecha DESC, hora DESC", sqlite3.connect("inventario.db"))
+        st.metric("Total Histórico", f"${df_v['total'].sum():.2f}")
+        st.dataframe(df_v, use_container_width=True)
+    except:
+        st.info("Aún no hay ventas registradas.")
 
 with tab_fiados:
     st.subheader("👥 Clientes con Fiado")
-    df_f = pd.read_sql("SELECT * FROM fiados WHERE estado='Pendiente'", sqlite3.connect("inventario.db"))
-    st.dataframe(df_f, use_container_width=True)
-    if not df_f.empty:
-        cliente_pagar = st.selectbox("Liquidar deuda de:", df_f['cliente'].unique())
-        if st.button("Marcar como Pagado"):
-            query_db("UPDATE fiados SET estado='Pagado' WHERE cliente=?", (cliente_pagar,))
-            st.success("Deuda liquidada.")
-            st.rerun()
+    try:
+        df_f = pd.read_sql("SELECT * FROM fiados WHERE estado='Pendiente'", sqlite3.connect("inventario.db"))
+        st.dataframe(df_f, use_container_width=True)
+        if not df_f.empty:
+            cliente_pagar = st.selectbox("Liquidar deuda de:", df_f['cliente'].unique())
+            if st.button("Marcar como Pagado"):
+                query_db("UPDATE fiados SET estado='Pagado' WHERE cliente=?", (cliente_pagar,))
+                st.success("Deuda liquidada.")
+                st.rerun()
+    except:
+        st.info("Aún no hay fiados pendientes.")
