@@ -784,6 +784,70 @@ def render_resumen_caja():
             )
 
 # ============================================================
+#  INVENTARIO (solo lectura para vendedora)
+# ============================================================
+def render_inventario():
+    st.markdown("### 📦 INVENTARIO")
+    st.caption("Solo lectura — el administrador es quien modifica el stock.")
+
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Actualizar", use_container_width=True, key="refresh_inv_vend"):
+            st.cache_data.clear()
+            st.rerun()
+
+    # Selector de fecha para ver lo vendido ese día
+    fecha_sel = st.date_input("📅 Ver ventas del día:", value=datetime.now().date(), key="inv_fecha")
+    fecha_str = fecha_sel.strftime("%Y-%m-%d")
+
+    df_cat  = leer_catalogo()
+    df_vtas = leer_ventas()
+
+    if df_cat.empty:
+        st.warning("No hay productos registrados.")
+        return
+
+    # Calcular vendido en la fecha seleccionada por código
+    vendido_por_codigo = {}
+    if not df_vtas.empty and "Fecha" in df_vtas.columns and "Codigo" in df_vtas.columns:
+        vtas_fecha = df_vtas[df_vtas["Fecha"] == fecha_str]
+        if not vtas_fecha.empty:
+            vendido_por_codigo = (
+                vtas_fecha.groupby("Codigo")["Cantidad"].sum().to_dict()
+            )
+
+    st.markdown("---")
+
+    for cat_nombre, cat_emoji in [("Bebidas", "🥤"), ("Accesorios", "👜")]:
+        df_c = df_cat[df_cat["Categoria"].str.strip().str.lower() == cat_nombre.lower()]
+        if df_c.empty:
+            continue
+
+        st.markdown(f"#### {cat_emoji} {cat_nombre}")
+
+        filas = []
+        for _, row in df_c.iterrows():
+            cod = str(row["Codigo"])
+            stock_actual = float(row["Stock"])
+            vendido      = float(vendido_por_codigo.get(cod, 0))
+            # Stock inicial estimado = stock actual + lo vendido en esa fecha
+            stock_ini    = stock_actual + vendido
+
+            filas.append({
+                "Producto":       row["Producto"],
+                "Unidad":         row.get("Unidad", "Unidades"),
+                "Stock Inicial":  f"{stock_ini:g}",
+                f"Vendido ({fecha_str})": f"{vendido:g}",
+                "Stock Actual":   f"{stock_actual:g}",
+            })
+
+        df_display = pd.DataFrame(filas)
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.markdown("---")
+
+    st.caption("📌 'Stock Inicial' = Stock actual + lo vendido en la fecha seleccionada")
+
+# ============================================================
 #  CIERRE DE CAJA
 # ============================================================
 def render_cierre_caja():
@@ -855,8 +919,8 @@ df_bebidas    = df_full[df_full["Categoria"].str.strip().str.lower() == "bebidas
 df_accesorios = df_full[df_full["Categoria"].str.strip().str.lower() == "accesorios"].copy() if not df_full.empty else pd.DataFrame()
 
 # Tabs principales
-tab_beb, tab_acc, tab_caja, tab_cierre = st.tabs(
-    ["🥤 Bebidas", "👜 Accesorios", "💰 Mi Caja", "🔒 Cerrar Caja"]
+tab_beb, tab_acc, tab_inv, tab_caja, tab_cierre = st.tabs(
+    ["🥤 Bebidas", "👜 Accesorios", "📦 Inventario", "💰 Mi Caja", "🔒 Cerrar Caja"]
 )
 
 with tab_beb:
@@ -864,6 +928,9 @@ with tab_beb:
 
 with tab_acc:
     render_pos("acc", "Accesorios", "👜", df_accesorios, st.session_state.caja_metodos_acc)
+
+with tab_inv:
+    render_inventario()
 
 with tab_caja:
     render_resumen_caja()
