@@ -1,6 +1,6 @@
 """
-SODA PRO - APP ADMIN
-Sistema POS completo con reportes, cortes y control total
+SODA PRO - APP ADMIN v5
+Sistema POS completo con reportes, cortes, categorías y control de caja
 """
 import streamlit as st
 import gspread
@@ -24,10 +24,7 @@ st.set_page_config(
 # ============================================================
 def generar_codigo_ean13():
     """Genera un código EAN-13 válido con checksum correcto"""
-    # Primero 12 dígitos: 500 + 9 aleatorios (500 es prefijo para uso interno)
     base = '500' + ''.join([str(random.randint(0, 9)) for _ in range(9)])
-    
-    # Calcular dígito de verificación (checksum EAN-13)
     suma = 0
     for i, digito in enumerate(base):
         if i % 2 == 0:
@@ -35,7 +32,6 @@ def generar_codigo_ean13():
         else:
             suma += int(digito) * 3
     checksum = (10 - (suma % 10)) % 10
-    
     return base + str(checksum)
 
 # CSS Profesional
@@ -89,8 +85,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad",
+                  "Precio_Unit", "Costo_Unit", "Total", "Ganancia", "Metodo_Pago", "Cliente", "Categoria"]
+HEADERS_FIADOS = ["Fecha", "Hora", "Cliente", "Detalle", "Total", "Estado"]
+HEADERS_CAJA   = ["Fecha", "Hora", "Tipo", "Efectivo_Inicial", "Metodo", "Monto", "Descripcion", "Categoria"]
+
 # ============================================================
-#  FUNCIONES
+#  FUNCIONES DE GOOGLE SHEETS
 # ============================================================
 def get_spreadsheet():
     creds = Credentials.from_service_account_info(CREDENTIALS, scopes=SCOPES)
@@ -100,32 +101,35 @@ def get_spreadsheet():
 def get_catalog_ws():
     return get_spreadsheet().get_worksheet(0)
 
-HEADERS_VENTAS = ["Fecha", "Hora", "Codigo", "Producto", "Cantidad", "Unidad",
-                  "Precio_Unit", "Costo_Unit", "Total", "Ganancia", "Metodo_Pago", "Cliente"]
-
 def get_ventas_ws():
-    """Obtiene o crea la hoja de Ventas, asegurando encabezados actualizados"""
     sh = get_spreadsheet()
     try:
         ws = sh.worksheet("Ventas")
-        if ws.row_values(1) != HEADERS_VENTAS:
+        encabezados = ws.row_values(1)
+        if "Categoria" not in encabezados:
             ws.update('A1', [HEADERS_VENTAS])
         return ws
-    except:
-        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=12)
+    except Exception:
+        ws = sh.add_worksheet(title="Ventas", rows=1000, cols=13)
         ws.append_row(HEADERS_VENTAS)
         return ws
 
-HEADERS_FIADOS = ["Fecha", "Hora", "Cliente", "Detalle", "Total", "Estado"]
-
 def get_fiados_ws():
-    """Obtiene o crea la hoja de Fiados (clientes con deuda pendiente)"""
     sh = get_spreadsheet()
     try:
         return sh.worksheet("Fiados")
-    except:
+    except Exception:
         ws = sh.add_worksheet(title="Fiados", rows=500, cols=6)
         ws.append_row(HEADERS_FIADOS)
+        return ws
+
+def get_caja_ws():
+    sh = get_spreadsheet()
+    try:
+        return sh.worksheet("Caja")
+    except Exception:
+        ws = sh.add_worksheet(title="Caja", rows=2000, cols=8)
+        ws.append_row(HEADERS_CAJA)
         return ws
 
 @st.cache_data(ttl=30)
@@ -134,7 +138,6 @@ def leer_catalogo():
     registros = ws.get_all_records()
     if registros:
         df = pd.DataFrame(registros)
-        # Limpiar valores numéricos
         for col in ["Stock", "Costo", "Precio_Venta"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -142,8 +145,10 @@ def leer_catalogo():
             df["Codigo"] = df["Codigo"].astype(str)
         if "Unidad" not in df.columns:
             df["Unidad"] = "Unidades"
+        if "Categoria" not in df.columns:
+            df["Categoria"] = "Bebidas"
         return df
-    return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Unidad", "Costo", "Precio_Venta"])
+    return pd.DataFrame(columns=["Codigo", "Producto", "Stock", "Unidad", "Costo", "Precio_Venta", "Categoria"])
 
 @st.cache_data(ttl=30)
 def leer_ventas():
@@ -157,80 +162,8 @@ def leer_ventas():
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
             return df
         return pd.DataFrame(columns=HEADERS_VENTAS)
-    except:
+    except Exception:
         return pd.DataFrame()
-
-def agregar_producto(codigo, producto, stock, unidad, costo, precio):
-    """Agrega UNA fila nueva sin tocar las demás. 100% seguro."""
-    try:
-        ws = get_catalog_ws()
-        
-        # Solo agrega una fila nueva al final
-        nueva_fila = [
-            str(codigo),
-            str(producto),
-            float(stock) if not pd.isna(float(stock)) else 0.0,
-            str(unidad),
-            float(costo) if not pd.isna(float(costo)) else 0.0,
-            float(precio) if not pd.isna(float(precio)) else 0.0
-        ]
-        ws.append_row(nueva_fila)
-        
-        # Limpiar cache para que lea datos nuevos
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"❌ Error agregando producto: {str(e)}")
-        return False
-
-
-def actualizar_producto(codigo_original, producto, stock, unidad, costo, precio):
-    """Actualiza UNA fila específica sin tocar las demás. 100% seguro."""
-    try:
-        ws = get_catalog_ws()
-        registros = ws.get_all_records()
-        
-        # Buscar el índice de la fila (empieza en 2 porque fila 1 son encabezados)
-        for idx, reg in enumerate(registros, start=2):
-            if str(reg.get("Codigo", "")) == str(codigo_original):
-                # Actualizar cada celda de esa fila
-                fila_actualizada = [
-                    str(codigo_original),
-                    str(producto),
-                    float(stock) if not pd.isna(float(stock)) else 0.0,
-                    str(unidad),
-                    float(costo) if not pd.isna(float(costo)) else 0.0,
-                    float(precio) if not pd.isna(float(precio)) else 0.0
-                ]
-                # Actualizar el rango de esa fila específica (A a F)
-                ws.update(f"A{idx}:F{idx}", [fila_actualizada])
-                st.cache_data.clear()
-                return True
-        
-        st.error(f"❌ No se encontró el producto con código {codigo_original}")
-        return False
-    except Exception as e:
-        st.error(f"❌ Error actualizando: {str(e)}")
-        return False
-
-
-def eliminar_producto(codigo):
-    """Elimina UNA fila específica. 100% seguro."""
-    try:
-        ws = get_catalog_ws()
-        registros = ws.get_all_records()
-        
-        for idx, reg in enumerate(registros, start=2):
-            if str(reg.get("Codigo", "")) == str(codigo):
-                ws.delete_rows(idx)
-                st.cache_data.clear()
-                return True
-        
-        st.error(f"❌ No se encontró el producto con código {codigo}")
-        return False
-    except Exception as e:
-        st.error(f"❌ Error eliminando: {str(e)}")
-        return False
 
 @st.cache_data(ttl=30)
 def leer_fiados():
@@ -243,8 +176,100 @@ def leer_fiados():
         return df
     return pd.DataFrame(columns=HEADERS_FIADOS)
 
+@st.cache_data(ttl=30)
+def leer_caja():
+    try:
+        ws = get_caja_ws()
+        registros = ws.get_all_records()
+        if registros:
+            df = pd.DataFrame(registros)
+            if "Monto" in df.columns:
+                df["Monto"] = pd.to_numeric(df["Monto"], errors="coerce").fillna(0)
+            if "Efectivo_Inicial" in df.columns:
+                df["Efectivo_Inicial"] = pd.to_numeric(df["Efectivo_Inicial"], errors="coerce").fillna(0)
+            return df
+        return pd.DataFrame(columns=HEADERS_CAJA)
+    except Exception:
+        return pd.DataFrame(columns=HEADERS_CAJA)
+
+def agregar_producto(codigo, producto, stock, unidad, costo, precio, categoria):
+    """Agrega UNA fila nueva sin tocar las demás. 100% seguro."""
+    try:
+        ws = get_catalog_ws()
+        nueva_fila = [
+            str(codigo), str(producto),
+            float(stock) if not pd.isna(float(stock)) else 0.0,
+            str(unidad),
+            float(costo) if not pd.isna(float(costo)) else 0.0,
+            float(precio) if not pd.isna(float(precio)) else 0.0,
+            str(categoria)
+        ]
+        ws.append_row(nueva_fila)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error agregando producto: {str(e)}")
+        return False
+
+def actualizar_producto(codigo_original, producto, stock, unidad, costo, precio, categoria):
+    """Actualiza UNA fila específica sin tocar las demás. 100% seguro."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo_original):
+                fila_actualizada = [
+                    str(codigo_original), str(producto),
+                    float(stock) if not pd.isna(float(stock)) else 0.0,
+                    str(unidad),
+                    float(costo) if not pd.isna(float(costo)) else 0.0,
+                    float(precio) if not pd.isna(float(precio)) else 0.0,
+                    str(categoria)
+                ]
+                # Detectar cuántas columnas tiene la hoja
+                n_cols = len(ws.row_values(1))
+                col_fin = chr(ord('A') + len(fila_actualizada) - 1)
+                ws.update(f"A{idx}:{col_fin}{idx}", [fila_actualizada])
+                st.cache_data.clear()
+                return True
+        st.error(f"❌ No se encontró el producto con código {codigo_original}")
+        return False
+    except Exception as e:
+        st.error(f"❌ Error actualizando: {str(e)}")
+        return False
+
+def eliminar_producto(codigo):
+    """Elimina UNA fila específica. 100% seguro."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo):
+                ws.delete_rows(idx)
+                st.cache_data.clear()
+                return True
+        st.error(f"❌ No se encontró el producto con código {codigo}")
+        return False
+    except Exception as e:
+        st.error(f"❌ Error eliminando: {str(e)}")
+        return False
+
+def actualizar_stock_producto(codigo, nuevo_stock):
+    """Actualiza solo el stock de un producto (columna C)."""
+    try:
+        ws = get_catalog_ws()
+        registros = ws.get_all_records()
+        for idx, reg in enumerate(registros, start=2):
+            if str(reg.get("Codigo", "")) == str(codigo):
+                ws.update_cell(idx, 3, float(nuevo_stock))
+                st.cache_data.clear()
+                return True
+        return False
+    except Exception as e:
+        st.error(f"❌ Error actualizando stock: {str(e)}")
+        return False
+
 def marcar_fiados_pagados(cliente):
-    """Marca como Pagado todas las filas Pendientes de un cliente"""
     ws = get_fiados_ws()
     valores = ws.get_all_values()
     if not valores:
@@ -256,17 +281,15 @@ def marcar_fiados_pagados(cliente):
         if len(row) > col_estado and row[col_cliente] == cliente and row[col_estado] == "Pendiente":
             ws.update_cell(i, col_estado + 1, "Pagado")
 
-def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente=""):
-    """Registra venta en hoja Ventas y actualiza stock"""
+def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pago="Efectivo", cliente="", categoria=""):
     ws_ventas = get_ventas_ws()
     ahora = datetime.now()
     total = cantidad * precio
     ganancia = cantidad * (precio - costo)
     ws_ventas.append_row([
-        ahora.strftime("%Y-%m-%d"),
-        ahora.strftime("%H:%M:%S"),
+        ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"),
         str(codigo), producto, cantidad, unidad,
-        precio, costo, total, ganancia, metodo_pago, cliente
+        precio, costo, total, ganancia, metodo_pago, cliente, categoria
     ])
 
 # ============================================================
@@ -275,8 +298,8 @@ def registrar_venta(codigo, producto, cantidad, unidad, precio, costo, metodo_pa
 st.title("🥤 SODA PRO - ADMIN")
 st.markdown("---")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📲 OPERACIONES", "📊 INVENTARIO", "📦 PRODUCTOS", "📈 REPORTES", "👥 FIADOS", "⚙️ SISTEMA"]
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+    ["📲 OPERACIONES", "📊 INVENTARIO", "📦 PRODUCTOS", "📈 REPORTES", "👥 FIADOS", "📦 CAJA VENDEDORA", "⚙️ SISTEMA"]
 )
 
 # ============================================================
@@ -284,26 +307,26 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 # ============================================================
 with tab1:
     df = leer_catalogo()
-    
+
     if df.empty:
-        st.warning("⚠️ No hay productos. Agrega en Google Sheets.")
+        st.warning("⚠️ No hay productos. Agrega en la pestaña PRODUCTOS.")
     else:
         tipo_operacion = st.radio(
             "TIPO DE OPERACIÓN:",
             ["➕ INGRESO (Compra)", "🛒 VENTA"],
             horizontal=True
         )
-        
+
         st.markdown("---")
-        
+
         metodo = st.radio(
             "MÉTODO DE SELECCIÓN:",
             ["📋 Seleccionar de lista", "🔍 Escanear código"],
             horizontal=True
         )
-        
+
         producto_seleccionado = None
-        
+
         if metodo == "📋 Seleccionar de lista":
             opciones = ["--- SELECCIONA ---"] + df["Producto"].tolist()
             producto_seleccionado = st.selectbox("PRODUCTO:", opciones, key="admin_dropdown")
@@ -323,7 +346,7 @@ with tab1:
                     st.success(f"✅ {producto_seleccionado}")
                 else:
                     st.error(f"❌ Código {codigo_escaneado} no encontrado")
-        
+
         if producto_seleccionado:
             fila = df[df["Producto"] == producto_seleccionado].iloc[0]
             codigo = fila["Codigo"]
@@ -331,10 +354,11 @@ with tab1:
             unidad = fila.get("Unidad", "Unidades")
             costo = float(fila.get("Costo", 0))
             precio = float(fila.get("Precio_Venta", 0))
-            
+            categoria = fila.get("Categoria", "")
+
             st.markdown("---")
-            
-            col1, col2, col3, col4 = st.columns(4)
+
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
                 st.metric("🔖 Código", codigo)
             with col2:
@@ -343,18 +367,16 @@ with tab1:
                 st.metric("💰 Costo", f"${costo:.2f}")
             with col4:
                 st.metric("💵 Precio", f"${precio:.2f}")
-            
+            with col5:
+                st.metric("🏷️ Categoría", categoria)
+
             st.markdown("---")
-            
+
             cantidad = st.number_input(
                 f"CANTIDAD ({unidad}):",
-                min_value=0.01,
-                value=1.0,
-                step=1.0,
-                format="%.2f"
+                min_value=0.01, value=1.0, step=1.0, format="%.2f"
             )
-            
-            # Mostrar totales si es venta
+
             if "VENTA" in tipo_operacion:
                 total = cantidad * precio
                 ganancia = cantidad * (precio - costo)
@@ -363,15 +385,14 @@ with tab1:
                     st.metric("💵 Total Venta", f"${total:.2f}")
                 with col2:
                     st.metric("📈 Ganancia", f"${ganancia:.2f}")
-            
-            # Validación
+
             boton_disabled = False
             if "VENTA" in tipo_operacion and cantidad > stock_actual:
                 st.error(f"❌ Stock insuficiente. Disponible: {stock_actual:g} {unidad}")
                 boton_disabled = True
-            
+
             st.markdown("---")
-            
+
             if st.button(
                 f"{'➕ CONFIRMAR INGRESO' if 'INGRESO' in tipo_operacion else '🛒 CONFIRMAR VENTA'}",
                 disabled=boton_disabled,
@@ -380,22 +401,20 @@ with tab1:
             ):
                 ajuste = -cantidad if "VENTA" in tipo_operacion else cantidad
                 nuevo_stock = stock_actual + ajuste
-                
-                # Actualizar solo esa fila (no reescribir todo)
-                fila_producto = df[df["Producto"] == producto_seleccionado].iloc[0]
+
+                fila_prod = df[df["Producto"] == producto_seleccionado].iloc[0]
                 actualizar_producto(
-                    fila_producto["Codigo"],
-                    fila_producto["Producto"],
-                    nuevo_stock,
-                    fila_producto.get("Unidad", "Unidades"),
-                    float(fila_producto.get("Costo", 0)),
-                    float(fila_producto.get("Precio_Venta", 0))
+                    fila_prod["Codigo"], fila_prod["Producto"], nuevo_stock,
+                    fila_prod.get("Unidad", "Unidades"),
+                    float(fila_prod.get("Costo", 0)),
+                    float(fila_prod.get("Precio_Venta", 0)),
+                    fila_prod.get("Categoria", "")
                 )
-                
-                # Registrar venta en historial
+
                 if "VENTA" in tipo_operacion:
-                    registrar_venta(codigo, producto_seleccionado, cantidad, unidad, precio, costo)
-                
+                    registrar_venta(codigo, producto_seleccionado, cantidad, unidad,
+                                    precio, costo, categoria=categoria)
+
                 st.cache_data.clear()
                 st.success(f"✅ {producto_seleccionado} actualizado!")
                 st.info(f"Nuevo stock: {nuevo_stock:g} {unidad}")
@@ -406,33 +425,56 @@ with tab1:
 # ============================================================
 with tab2:
     df = leer_catalogo()
-    
-    st.subheader("📊 ESTADO DEL INVENTARIO")
+
+    col_h1, col_h2 = st.columns([4, 1])
+    with col_h1:
+        st.subheader("📊 ESTADO DEL INVENTARIO")
+    with col_h2:
+        if st.button("🔄 Actualizar", key="refresh_inv"):
+            st.cache_data.clear()
+            st.rerun()
+
     if df.empty:
         st.info("No hay productos registrados.")
     else:
+        # Filtro por categoría
+        categorias_disponibles = ["Todas"] + sorted(df["Categoria"].dropna().unique().tolist())
+        filtro_cat = st.selectbox("🏷️ Filtrar por categoría:", categorias_disponibles, key="filtro_inv_cat")
+
+        df_filtrado = df if filtro_cat == "Todas" else df[df["Categoria"] == filtro_cat]
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Productos", len(df))
+            st.metric("Total Productos", len(df_filtrado))
         with col2:
-            total_unidades = df["Stock"].sum()
-            st.metric("Unidades Totales", f"{total_unidades:g}")
+            st.metric("Unidades Totales", f"{df_filtrado['Stock'].sum():g}")
         with col3:
-            valor_inventario = (df["Stock"] * df.get("Costo", 0)).sum()
+            valor_inventario = (df_filtrado["Stock"] * df_filtrado["Costo"]).sum()
             st.metric("💰 Valor Inventario", f"${valor_inventario:.2f}")
         with col4:
-            bajo_stock = df[df["Stock"] <= 5]
+            bajo_stock = df_filtrado[df_filtrado["Stock"] <= 5]
             st.metric("⚠️ Stock Bajo", len(bajo_stock))
-        
+
         st.markdown("---")
-        
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        
+
+        # Tabla por categoría
+        if filtro_cat == "Todas":
+            for cat in sorted(df["Categoria"].dropna().unique().tolist()):
+                df_cat = df[df["Categoria"] == cat]
+                emoji = "🥤" if cat.lower() == "bebidas" else "👜"
+                st.markdown(f"#### {emoji} {cat}")
+                st.dataframe(
+                    df_cat[["Codigo", "Producto", "Stock", "Unidad", "Costo", "Precio_Venta"]],
+                    use_container_width=True, hide_index=True
+                )
+                st.markdown("---")
+        else:
+            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+
         if not bajo_stock.empty:
-            st.markdown("---")
-            st.warning("⚠️ PRODUCTOS CON STOCK BAJO")
-            st.dataframe(bajo_stock[["Producto", "Stock", "Unidad"]], 
-                        use_container_width=True, hide_index=True)
+            st.warning("⚠️ PRODUCTOS CON STOCK BAJO (≤ 5)")
+            st.dataframe(bajo_stock[["Producto", "Stock", "Unidad", "Categoria"]],
+                         use_container_width=True, hide_index=True)
 
 # ============================================================
 #  TAB 3: PRODUCTOS (agregar / editar / eliminar)
@@ -441,72 +483,60 @@ with tab3:
     st.subheader("📦 GESTIÓN DE PRODUCTOS")
     df_prod = leer_catalogo()
 
+    CATEGORIAS = ["Bebidas", "Accesorios"]
+    UNIDADES   = ["Unidades", "Media Libra", "Libra", "Kilo", "Saco", "Docena", "Bolsa", "Otro"]
+
     st.markdown("---")
 
     with st.expander("➕ AGREGAR PRODUCTO NUEVO", expanded=df_prod.empty):
         st.write("**Tip:** Deja el código vacío para generar uno automático (EAN-13 válido, escaneable)")
-        
+
         with st.form("form_agregar_producto", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                n_codigo = st.text_input("Código de barras (opcional - dejar vacío para generar):")
+                n_codigo   = st.text_input("Código de barras (opcional):")
                 n_producto = st.text_input("Nombre del producto:")
-                n_stock = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
+                n_stock    = st.number_input("Stock inicial:", min_value=0.0, value=0.0, step=1.0)
+                n_categoria = st.selectbox("Categoría:", CATEGORIAS, key="n_cat")
             with col2:
-                unidades_disponibles = ["Unidades", "Media Libra", "Libra", "Kilo", "Saco", "Docena", "Bolsa", "Otro"]
-                n_unidad = st.selectbox("Unidad de medida:", unidades_disponibles)
-                n_costo = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
-                n_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+                n_unidad   = st.selectbox("Unidad de medida:", UNIDADES)
+                n_costo    = st.number_input("Costo unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+                n_precio   = st.number_input("Precio de venta unitario:", min_value=0.0, value=0.0, step=0.01, format="%.2f")
 
             enviado = st.form_submit_button("➕ AGREGAR PRODUCTO", use_container_width=True, type="primary")
 
             if enviado:
                 n_codigo_limpio = n_codigo.strip()
-                
-                # Generar código EAN-13 si está vacío
                 if not n_codigo_limpio:
                     n_codigo_limpio = generar_codigo_ean13()
-                
+
                 if not n_producto.strip():
                     st.error("❌ El nombre del producto es obligatorio")
                 elif not df_prod.empty and n_codigo_limpio in df_prod["Codigo"].values:
                     st.error(f"❌ Ya existe un producto con el código {n_codigo_limpio}")
                 else:
-                    if agregar_producto(n_codigo_limpio, n_producto.strip(), n_stock, n_unidad, n_costo, n_precio):
-                        st.success(f"✅ {n_producto} agregado")
-                        st.info(f"📋 **Anota este código:** `{n_codigo_limpio}` — Escanéalo con la pistola")
+                    if agregar_producto(n_codigo_limpio, n_producto.strip(), n_stock, n_unidad, n_costo, n_precio, n_categoria):
+                        st.success(f"✅ {n_producto} agregado como {n_categoria}")
+                        st.info(f"📋 **Anota este código:** `{n_codigo_limpio}`")
                         st.rerun()
-                    else:
-                        st.error("❌ Hubo un error guardando. Intenta de nuevo.")
 
-    # Mostrar códigos generados para anotar en libreta
     if not df_prod.empty:
         st.markdown("---")
-        with st.expander("📋 VER TODOS LOS CÓDIGOS (para anotar en libreta)"):
+        with st.expander("📋 VER TODOS LOS CÓDIGOS"):
             st.write("**Copia estos códigos a tu libreta — la vendedora los escaneará con la pistola:**")
-            st.markdown("---")
-            
-            codigos_display = df_prod[["Codigo", "Producto", "Unidad"]].copy()
-            codigos_display.columns = ["📌 CÓDIGO", "📦 PRODUCTO", "🔖 UNIDAD"]
-            
-            # Mostrar tabla
+            codigos_display = df_prod[["Codigo", "Producto", "Unidad", "Categoria"]].copy()
+            codigos_display.columns = ["📌 CÓDIGO", "📦 PRODUCTO", "🔖 UNIDAD", "🏷️ CATEGORÍA"]
             st.dataframe(codigos_display, use_container_width=True, hide_index=True)
-            
-            # Opción de descargar como CSV
             csv_codigos = codigos_display.to_csv(index=False)
             st.download_button(
-                "📥 Descargar lista de códigos (CSV)",
-                data=csv_codigos,
-                file_name=f"codigos_productos_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
+                "📥 Descargar lista (CSV)", data=csv_codigos,
+                file_name=f"codigos_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv", use_container_width=True
             )
 
     st.markdown("---")
 
-    if df_prod.empty:
-        st.info("Agrega tu primer producto arriba para poder editarlo o eliminarlo.")
-    else:
+    if not df_prod.empty:
         with st.expander("✏️ EDITAR PRODUCTO"):
             producto_editar = st.selectbox("Selecciona producto:", df_prod["Producto"].tolist(), key="editar_select")
             idx = df_prod[df_prod["Producto"] == producto_editar].index[0]
@@ -515,20 +545,22 @@ with tab3:
             col1, col2 = st.columns(2)
             with col1:
                 e_producto = st.text_input("Nombre:", value=fila["Producto"], key="e_nombre")
-                e_stock = st.number_input("Stock:", min_value=0.0, value=float(fila["Stock"]), step=1.0, key="e_stock")
+                e_stock    = st.number_input("Stock:", min_value=0.0, value=float(fila["Stock"]), step=1.0, key="e_stock")
+                cat_actual  = fila.get("Categoria", "Bebidas")
+                idx_cat     = CATEGORIAS.index(cat_actual) if cat_actual in CATEGORIAS else 0
+                e_categoria = st.selectbox("Categoría:", CATEGORIAS, index=idx_cat, key="e_cat")
             with col2:
-                unidades_op = ["Unidades", "Media Libra", "Libra", "Kilo", "Saco", "Docena", "Bolsa", "Otro"]
                 unidad_actual = fila.get("Unidad", "Unidades")
-                idx_unidad = unidades_op.index(unidad_actual) if unidad_actual in unidades_op else 0
-                e_unidad = st.selectbox("Unidad de medida:", unidades_op, index=idx_unidad, key="e_unidad")
-                e_costo = st.number_input("Costo unitario:", min_value=0.0, value=float(fila.get("Costo", 0)),
-                                          step=0.01, format="%.2f", key="e_costo")
-                e_precio = st.number_input("Precio de venta unitario:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
-                                           step=0.01, format="%.2f", key="e_precio")
+                idx_unidad    = UNIDADES.index(unidad_actual) if unidad_actual in UNIDADES else 0
+                e_unidad  = st.selectbox("Unidad:", UNIDADES, index=idx_unidad, key="e_unidad")
+                e_costo   = st.number_input("Costo:", min_value=0.0, value=float(fila.get("Costo", 0)),
+                                             step=0.01, format="%.2f", key="e_costo")
+                e_precio  = st.number_input("Precio venta:", min_value=0.0, value=float(fila.get("Precio_Venta", 0)),
+                                             step=0.01, format="%.2f", key="e_precio")
 
             if st.button("💾 GUARDAR CAMBIOS", use_container_width=True, type="primary", key="guardar_edicion"):
-                codigo_original = fila["Codigo"]
-                if actualizar_producto(codigo_original, e_producto.strip(), e_stock, e_unidad, e_costo, e_precio):
+                if actualizar_producto(fila["Codigo"], e_producto.strip(), e_stock,
+                                       e_unidad, e_costo, e_precio, e_categoria):
                     st.success(f"✅ {e_producto} actualizado")
                     st.rerun()
 
@@ -538,7 +570,7 @@ with tab3:
             if st.button("🗑️ ELIMINAR PRODUCTO", use_container_width=True, disabled=not confirmar, key="btn_eliminar"):
                 codigo_eliminar = df_prod[df_prod["Producto"] == producto_eliminar]["Codigo"].values[0]
                 if eliminar_producto(codigo_eliminar):
-                    st.success(f"✅ {producto_eliminar} eliminado del catálogo")
+                    st.success(f"✅ {producto_eliminar} eliminado")
                     st.rerun()
 
 # ============================================================
@@ -546,27 +578,23 @@ with tab3:
 # ============================================================
 with tab4:
     st.subheader("📈 REPORTES Y CORTES DE VENTA")
-    
+
     ventas_df = leer_ventas()
-    
+
     if ventas_df.empty:
         st.info("📭 No hay ventas registradas todavía.")
     else:
-        # Convertir fecha
         ventas_df["Fecha"] = pd.to_datetime(ventas_df["Fecha"], errors="coerce")
-        
-        # Filtros
+
         st.markdown("### 📅 FILTRAR POR FECHA")
-        
         col1, col2, col3 = st.columns(3)
         with col1:
             filtro = st.selectbox(
-                "Período:",
-                ["Hoy", "Ayer", "Esta semana", "Este mes", "Personalizado", "Todo"]
+                "Período:", ["Hoy", "Ayer", "Esta semana", "Este mes", "Personalizado", "Todo"]
             )
-        
+
         hoy = datetime.now().date()
-        
+
         if filtro == "Hoy":
             fecha_ini = fecha_fin = hoy
         elif filtro == "Ayer":
@@ -583,35 +611,36 @@ with tab4:
             with col3:
                 fecha_fin = st.date_input("Hasta:", value=hoy)
         else:
-            fecha_ini = ventas_df["Fecha"].min().date() if not ventas_df.empty else hoy
+            fecha_ini = ventas_df["Fecha"].min().date() if not ventas_df["Fecha"].isna().all() else hoy
             fecha_fin = hoy
-        
-        # Filtrar
+
+        # Filtro categoría
+        categorias_rep = ["Todas", "Bebidas", "Accesorios"]
+        filtro_cat_rep = st.selectbox("🏷️ Categoría:", categorias_rep, key="rep_cat")
+
         mask = (ventas_df["Fecha"].dt.date >= fecha_ini) & (ventas_df["Fecha"].dt.date <= fecha_fin)
         ventas_periodo = ventas_df[mask]
-        
+
+        if filtro_cat_rep != "Todas" and "Categoria" in ventas_periodo.columns:
+            ventas_periodo = ventas_periodo[ventas_periodo["Categoria"] == filtro_cat_rep]
+
         st.markdown("---")
-        
+
         if ventas_periodo.empty:
-            st.info(f"No hay ventas en el período: {fecha_ini} a {fecha_fin}")
+            st.info(f"No hay ventas en el período seleccionado.")
         else:
-            # Métricas
             st.markdown(f"### 💰 CORTE: {fecha_ini} a {fecha_fin}")
-            
+
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                total_ventas = ventas_periodo["Total"].sum()
-                st.metric("💵 Total Ventas", f"${total_ventas:.2f}")
+                st.metric("💵 Total Ventas", f"${ventas_periodo['Total'].sum():.2f}")
             with col2:
-                total_ganancia = ventas_periodo["Ganancia"].sum()
-                st.metric("📈 Ganancia", f"${total_ganancia:.2f}")
+                st.metric("📈 Ganancia", f"${ventas_periodo['Ganancia'].sum():.2f}")
             with col3:
-                num_ventas = len(ventas_periodo)
-                st.metric("🛒 Transacciones", num_ventas)
+                st.metric("🛒 Transacciones", len(ventas_periodo))
             with col4:
-                unidades_vendidas = ventas_periodo["Cantidad"].sum()
-                st.metric("📦 Unidades Vendidas", f"{unidades_vendidas:g}")
-            
+                st.metric("📦 Unidades", f"{ventas_periodo['Cantidad'].sum():g}")
+
             st.markdown("---")
 
             # Corte por método de pago
@@ -626,34 +655,42 @@ with tab4:
                         st.metric(f"{iconos.get(metodo, '💳')} {metodo}", f"${monto:.2f}")
                 st.markdown("---")
 
+            # Corte por categoría (solo si se muestra "Todas")
+            if filtro_cat_rep == "Todas" and "Categoria" in ventas_periodo.columns:
+                st.markdown("### 🏷️ CORTE POR CATEGORÍA")
+                por_cat = ventas_periodo.groupby("Categoria")["Total"].sum().sort_values(ascending=False)
+                cols_cat = st.columns(max(len(por_cat), 1))
+                for col, (cat, monto) in zip(cols_cat, por_cat.items()):
+                    with col:
+                        emoji = "🥤" if cat.lower() == "bebidas" else "👜"
+                        st.metric(f"{emoji} {cat}", f"${monto:.2f}")
+                st.markdown("---")
+
             # Top productos
             st.markdown("### 🏆 TOP PRODUCTOS MÁS VENDIDOS")
             top_productos = ventas_periodo.groupby("Producto").agg({
-                "Cantidad": "sum",
-                "Total": "sum",
-                "Ganancia": "sum"
+                "Cantidad": "sum", "Total": "sum", "Ganancia": "sum"
             }).sort_values("Total", ascending=False).head(10)
             st.dataframe(top_productos, use_container_width=True)
-            
+
             st.markdown("---")
-            
-            # Detalle de ventas
+
             st.markdown("### 📋 DETALLE DE VENTAS")
-            st.dataframe(ventas_periodo.sort_values(["Fecha", "Hora"], ascending=False), 
-                        use_container_width=True, hide_index=True)
-            
-            # Descargar
+            cols_mostrar = [c for c in ["Fecha", "Hora", "Producto", "Cantidad", "Unidad",
+                                         "Precio_Unit", "Total", "Metodo_Pago", "Cliente", "Categoria"]
+                            if c in ventas_periodo.columns]
+            st.dataframe(ventas_periodo[cols_mostrar].sort_values(["Fecha", "Hora"], ascending=False),
+                         use_container_width=True, hide_index=True)
+
             csv = ventas_periodo.to_csv(index=False)
             st.download_button(
-                "📥 Descargar Reporte CSV",
-                data=csv,
+                "📥 Descargar Reporte CSV", data=csv,
                 file_name=f"corte_{fecha_ini}_{fecha_fin}.csv",
-                mime="text/csv",
-                use_container_width=True
+                mime="text/csv", use_container_width=True
             )
 
 # ============================================================
-#  TAB 4: SISTEMA
+#  TAB 5: FIADOS
 # ============================================================
 with tab5:
     st.subheader("👥 CLIENTES FIADOS")
@@ -677,7 +714,6 @@ with tab5:
             st.success("✅ No hay deudas pendientes. Todo al día.")
         else:
             resumen = pendientes.groupby("Cliente")["Total"].sum().sort_values(ascending=False)
-
             st.markdown(f"### 💰 TOTAL POR COBRAR: ${pendientes['Total'].sum():.2f}")
             st.markdown("---")
 
@@ -703,45 +739,153 @@ with tab5:
 
         pagados = fiados_df[fiados_df["Estado"] == "Pagado"]
         if not pagados.empty:
-            with st.expander(f"✅ Historial de fiados pagados ({len(pagados)})"):
+            with st.expander(f"✅ Historial pagados ({len(pagados)})"):
                 st.dataframe(
                     pagados[["Fecha", "Hora", "Cliente", "Detalle", "Total"]],
                     use_container_width=True, hide_index=True
                 )
 
+# ============================================================
+#  TAB 6: CAJA VENDEDORA (vista en tiempo real)
+# ============================================================
 with tab6:
+    st.subheader("📦 ESTADO DE CAJA DE VENDEDORA")
+
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Actualizar", key="refresh_caja_admin"):
+            st.cache_data.clear()
+            st.rerun()
+
+    df_caja   = leer_caja()
+    df_ventas = leer_ventas()
+    hoy_str   = datetime.now().strftime("%Y-%m-%d")
+
+    fecha_caja = st.date_input("📅 Ver fecha:", value=datetime.now().date(), key="admin_caja_fecha")
+    fecha_caja_str = fecha_caja.strftime("%Y-%m-%d")
+
+    st.markdown("---")
+
+    # Aperturas del día
+    if not df_caja.empty and "Fecha" in df_caja.columns and "Tipo" in df_caja.columns:
+        aperturas = df_caja[(df_caja["Fecha"] == fecha_caja_str) & (df_caja["Tipo"] == "APERTURA")]
+        cierres   = df_caja[(df_caja["Fecha"] == fecha_caja_str) & (df_caja["Tipo"] == "CIERRE")]
+
+        if not aperturas.empty:
+            st.markdown("### 🔓 Aperturas de caja")
+            for _, ap in aperturas.iterrows():
+                cat = ap.get("Categoria", "")
+                emoji = "🥤" if str(cat).lower() == "bebidas" else "👜"
+                ef_ini = float(ap.get("Efectivo_Inicial", 0))
+                st.info(f"{emoji} **{cat}** — Apertura a las {ap.get('Hora', '')} | Efectivo inicial: ${ef_ini:.2f}")
+        else:
+            st.warning("⚠️ Aún no se ha abierto la caja hoy")
+
+        if not cierres.empty:
+            st.markdown("### 🔒 Cierres de caja")
+            for _, ci in cierres.iterrows():
+                cat = ci.get("Categoria", "")
+                emoji = "🥤" if str(cat).lower() == "bebidas" else "👜"
+                st.success(f"{emoji} **{cat}** — Cierre a las {ci.get('Hora', '')} | Total: ${float(ci.get('Monto', 0)):.2f}")
+
+    st.markdown("---")
+
+    # Ventas del día por categoría y método
+    if not df_ventas.empty and "Fecha" in df_ventas.columns:
+        ventas_hoy = df_ventas[df_ventas["Fecha"] == fecha_caja_str]
+    else:
+        ventas_hoy = pd.DataFrame()
+
+    for cat_nombre, emoji in [("Bebidas", "🥤"), ("Accesorios", "👜")]:
+        st.markdown(f"### {emoji} {cat_nombre}")
+
+        if ventas_hoy.empty or "Categoria" not in ventas_hoy.columns:
+            st.caption("Sin ventas registradas")
+        else:
+            v_cat = ventas_hoy[ventas_hoy["Categoria"] == cat_nombre]
+            if v_cat.empty:
+                st.caption("Sin ventas")
+            else:
+                por_metodo = v_cat.groupby("Metodo_Pago")["Total"].sum()
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    st.metric("💵 Efectivo", f"${por_metodo.get('Efectivo', 0):.2f}")
+                with c2:
+                    st.metric("🏦 Transf.", f"${por_metodo.get('Transferencia', 0):.2f}")
+                with c3:
+                    st.metric("📝 Fiado", f"${por_metodo.get('Fiado', 0):.2f}")
+                with c4:
+                    st.metric("💰 TOTAL", f"${v_cat['Total'].sum():.2f}")
+
+                with st.expander(f"Ver detalle {cat_nombre}"):
+                    cols_d = [c for c in ["Hora", "Producto", "Cantidad", "Total", "Metodo_Pago", "Cliente"]
+                              if c in v_cat.columns]
+                    st.dataframe(v_cat[cols_d].sort_values("Hora", ascending=False),
+                                 use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+    # Inventario actual (solo lectura — admin ve, pero podría tomar nota del conteo físico)
+    st.markdown("### 📦 INVENTARIO ACTUAL (conteo)")
+    df_inv = leer_catalogo()
+    if not df_inv.empty:
+        df_inv_display = df_inv[["Producto", "Stock", "Unidad", "Categoria"]].copy()
+        df_inv_display.columns = ["Producto", "Stock Actual", "Unidad", "Categoría"]
+        st.dataframe(df_inv_display, use_container_width=True, hide_index=True)
+        st.caption("ℹ️ La vendedora puede ver este inventario pero no modificarlo.")
+
+# ============================================================
+#  TAB 7: SISTEMA
+# ============================================================
+with tab7:
     st.subheader("⚙️ CONFIGURACIÓN DEL SISTEMA")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.write("**ESTADO**")
         st.info("✅ Sistema operativo")
         st.info("✅ Google Sheets conectado")
         st.info("✅ Escáner listo")
         st.info("✅ Registro de ventas activo")
-    
+
     with col2:
         st.write("**ACCIONES**")
         if st.button("🔄 Sincronizar Datos", use_container_width=True):
             st.cache_data.clear()
             st.success("✅ Sincronizado")
-        
+
         if st.button("📥 Descargar Catálogo", use_container_width=True):
             df = leer_catalogo()
             csv = df.to_csv(index=False)
             st.download_button(
-                "📥 Descargar CSV",
-                data=csv,
+                "📥 Descargar CSV", data=csv,
                 file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
+                mime="text/csv", use_container_width=True
             )
-    
+
+    st.markdown("---")
+    st.markdown("### 🔗 CONFIGURACIÓN DE HOJAS GOOGLE SHEETS")
+    st.info("""
+    **Columnas necesarias en la hoja del catálogo (Hoja 1):**
+
+    | Columna | Descripción |
+    |---------|-------------|
+    | Codigo | EAN-13 del producto |
+    | Producto | Nombre |
+    | Stock | Cantidad disponible |
+    | Unidad | Unidades / Libra / etc. |
+    | Costo | Precio de compra |
+    | Precio_Venta | Precio de venta |
+    | Categoria | **Bebidas** o **Accesorios** |
+
+    ⚠️ La columna **Categoria** debe existir para que funcione la separación por pestañas.
+    """)
+
     st.markdown("---")
     st.markdown("### 🔗 ENLACE PARA VENDEDORA")
-    st.info("Comparte este enlace con la vendedora (solo puede vender, no ver reportes)")
+    st.info("Comparte este enlace con la vendedora")
     st.code("https://soda-vendedora.streamlit.app", language=None)
-    
+
     st.markdown("---")
-    st.caption("Soda Pro v4.0 - Sistema POS Completo")
+    st.caption("Soda Pro v5.0 - Sistema POS Completo con Caja y Categorías")
